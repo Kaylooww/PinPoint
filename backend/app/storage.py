@@ -294,3 +294,74 @@ def note_blocks(ws: str) -> list[dict[str, Any]]:
         }
         for n in list_notes(ws)
     ]
+
+
+def remove_file(ws: str, file_id: str) -> None:
+    """Forget a file: its record and its blocks. Never touches the user's original on disk."""
+    with lock(ws):
+        save_file_records(ws, [r for r in list_file_records(ws) if r["id"] != file_id])
+        replace_file_blocks(ws, file_id, [])
+
+
+def add_folder_file(ws: str, folder_id: str, source_path: str, size: int, mtime: float) -> dict[str, Any]:
+    name = Path(source_path).name
+    record = {
+        "id": uuid.uuid4().hex[:12],
+        "name": name,
+        "type": file_type(name),
+        "pages": 0,
+        "size_bytes": size,
+        "status": "queued",
+        "source": "folder",
+        "source_path": source_path,
+        "path": source_path,  # parsed in place, read-only
+        "folder_id": folder_id,
+        "mtime": mtime,
+        "created_at": now_iso(),
+    }
+    with lock(ws):
+        records = list_file_records(ws)
+        records.append(record)
+        save_file_records(ws, records)
+    return record
+
+
+# Connected folders (folders.json)
+
+
+def list_folder_records(ws: str) -> list[dict[str, Any]]:
+    return _read_json(ws_dir(ws) / "folders.json", [])
+
+
+def save_folder_records(ws: str, records: list[dict[str, Any]]) -> None:
+    with lock(ws):
+        _write_json(ws_dir(ws) / "folders.json", records)
+
+
+def update_folder(ws: str, folder_id: str, **changes: Any) -> dict[str, Any]:
+    with lock(ws):
+        records = list_folder_records(ws)
+        for record in records:
+            if record["id"] == folder_id:
+                for key, value in changes.items():
+                    if value is None:
+                        record.pop(key, None)
+                    else:
+                        record[key] = value
+                save_folder_records(ws, records)
+                return record
+    raise NotFound(folder_id)
+
+
+def folder_view(ws: str, record: dict[str, Any]) -> dict[str, Any]:
+    count = sum(1 for r in list_file_records(ws) if r.get("folder_id") == record["id"])
+    view = {
+        "id": record["id"],
+        "path": record["path"],
+        "file_count": count,
+        "status": record["status"],
+        "last_scanned_at": record.get("last_scanned_at"),
+    }
+    if record.get("error"):
+        view["error"] = record["error"]
+    return view

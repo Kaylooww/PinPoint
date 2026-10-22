@@ -7,7 +7,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
 
-from . import answer, crops, llm, parsing, search, storage
+from . import answer, crops, folders, llm, parsing, search, storage
 
 MAX_UPLOAD_BYTES = 50 * 1024 * 1024
 
@@ -19,6 +19,7 @@ async def lifespan(_: FastAPI) -> AsyncIterator[None]:
     for ws in storage.workspace_ids():
         search.rebuild(ws)
         parsing.resume_interrupted(ws)
+        folders.resume(ws)
     yield
 
 
@@ -39,6 +40,10 @@ class CreateWorkspace(BaseModel):
 
 class CreateNote(BaseModel):
     text: str = Field(min_length=1, max_length=4000)
+
+
+class ConnectFolder(BaseModel):
+    path: str = Field(min_length=1, max_length=1024)
 
 
 class AskRequest(BaseModel):
@@ -120,6 +125,40 @@ def delete_note(ws: str, note_id: str) -> dict[str, bool]:
     except storage.NotFound:
         raise HTTPException(status_code=404, detail="Note not found") from None
     search.rebuild(ws)
+    return {"ok": True}
+
+
+@app.get("/api/workspaces/{ws}/folders")
+def list_folders(ws: str) -> list[dict[str, Any]]:
+    _require_workspace(ws)
+    return [storage.folder_view(ws, f) for f in storage.list_folder_records(ws)]
+
+
+@app.post("/api/workspaces/{ws}/folders")
+def connect_folder(ws: str, body: ConnectFolder) -> dict[str, Any]:
+    _require_workspace(ws)
+    try:
+        return folders.connect(ws, body.path)
+    except folders.FolderError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from None
+
+
+@app.post("/api/workspaces/{ws}/folders/{folder_id}/rescan")
+def rescan_folder(ws: str, folder_id: str) -> dict[str, Any]:
+    _require_workspace(ws)
+    try:
+        return folders.rescan(ws, folder_id)
+    except storage.NotFound:
+        raise HTTPException(status_code=404, detail="Folder not found") from None
+
+
+@app.delete("/api/workspaces/{ws}/folders/{folder_id}")
+def disconnect_folder(ws: str, folder_id: str) -> dict[str, bool]:
+    _require_workspace(ws)
+    try:
+        folders.disconnect(ws, folder_id)
+    except storage.NotFound:
+        raise HTTPException(status_code=404, detail="Folder not found") from None
     return {"ok": True}
 
 

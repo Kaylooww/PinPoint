@@ -155,15 +155,42 @@ def extract_blocks(raw: dict[str, Any], file_id: str, file_name: str) -> tuple[l
     return blocks, pages
 
 
+TEXT_EXTENSIONS = {"md", "txt", "csv"}
+
+
+def text_file_blocks(path: str, file_id: str, file_name: str) -> tuple[list[dict[str, Any]], int]:
+    """Plain-text files skip MinerU (it refuses them): one block per paragraph, no page image."""
+    text = Path(path).read_text(encoding="utf-8", errors="replace")
+    chunks = [c for c in BLOCK_SPLIT.split(text) if c.strip()] if not file_name.lower().endswith(".csv") else text.splitlines()
+    blocks = []
+    for m, chunk in enumerate(chunks, start=1):
+        cleaned = _clean_block(chunk) if not file_name.lower().endswith(".csv") else chunk.strip()
+        if sum(ch.isalnum() for ch in cleaned) >= 3:
+            blocks.append(
+                {
+                    "id": f"{file_id}-p1-b{m}",
+                    "file_id": file_id,
+                    "file_name": file_name,
+                    "page": 1,
+                    "locator": f"text:{file_id}/page:1/block:{m}",
+                    "text": cleaned,
+                }
+            )
+    return blocks, 1
+
+
 def _parse_job(ws: str, file_id: str) -> None:
     record = next((r for r in storage.list_file_records(ws) if r["id"] == file_id), None)
     if record is None:
         return
     storage.update_file(ws, file_id, status="parsing", progress_label="Reading pages…", error=None)
     try:
-        raw = parse_file(record["path"])
-        (storage.parsed_dir(ws) / f"{file_id}.json").write_text(json.dumps(raw, ensure_ascii=False), encoding="utf-8")
-        blocks, pages = extract_blocks(raw, file_id, record["name"])
+        if record["name"].rsplit(".", 1)[-1].lower() in TEXT_EXTENSIONS:
+            blocks, pages = text_file_blocks(record["path"], file_id, record["name"])
+        else:
+            raw = parse_file(record["path"])
+            (storage.parsed_dir(ws) / f"{file_id}.json").write_text(json.dumps(raw, ensure_ascii=False), encoding="utf-8")
+            blocks, pages = extract_blocks(raw, file_id, record["name"])
         if not blocks:
             raise ParseError("No readable text found. Try a clearer copy.")
         storage.replace_file_blocks(ws, file_id, blocks)
