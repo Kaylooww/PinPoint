@@ -125,7 +125,7 @@ export async function ask(ws: string, question: string, threadId?: string): Prom
   const history = (state.history[ws] ??= [])
   const thread_id = threadId && history.some((h) => h.thread_id === threadId) ? threadId : crypto.randomUUID().slice(0, 12)
   const id = crypto.randomUUID().slice(0, 12)
-  history.push({ id, question, response, thread_id, created_at: new Date().toISOString(), saved: false })
+  history.push({ id, question, response, thread_id, created_at: new Date().toISOString(), saved: response.status === 'answered' })
   return { ...structuredClone(response), thread_id, history_id: id }
 }
 

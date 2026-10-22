@@ -1,6 +1,6 @@
 # PinPoint — Handoff
 
-Last updated: Thursday 14:06, warm_cache.py ready for step 20. Branch: demo-prep.
+Last updated: Thursday 14:20, feature 1/4 (auto-saved answers). Branch: memory-viewer-demo.
 
 ## Done (and tested)
 - Phase A 1–6: backend core on MinerU **basic** tier; both samples parse to ready; crops; API end-to-end.
@@ -13,6 +13,7 @@ Last updated: Thursday 14:06, warm_cache.py ready for step 20. Branch: demo-prep
 - Phase D 17: knowledge stats strip at the top of the Files tab (GET /knowledge), refreshed when files change. Browser-checked against the API.
 
 ## In progress
+- Four late features, one slice at a time: (1) auto-save answered questions — DONE; (2) readable excerpt + full text in the citation panel; (3) document viewer + raw/text endpoints; (4) second demo client "Villanueva Accounting" with fictional generated documents. The document viewer is an overlay panel, not a route, so App.tsx routes stay untouched for the Landing/Sign in patch.
 - Phase E (started early; 18b Landing/Sign in comes as a patch from another session — don't touch LandingPage.tsx, SignInPage.tsx, or the routes in App.tsx).
 - Full demo run (light + dark) against the real backend: all steps pass after two fixes — (1) crops were unreadable (wide paragraph strips shrank to ~25 px): cards now fit the crop's height and show the start of the passage; the panel is 560 px wide and very wide strips keep a 112 px height and scroll sideways; (2) the DEMO.md follow-up "Who is the renter?" returned Not found ("renter" is in nearly every clause) → script now uses "Who is the renter named in that agreement?".
 - Step 22 drafted: docs/DEMO.md (start order, checklist, click-by-click script with questions verified on the samples, fallback plan). Swap in docs/DEMO_QUESTIONS.md when it exists.
@@ -20,7 +21,7 @@ Last updated: Thursday 14:06, warm_cache.py ready for step 20. Branch: demo-prep
 - Phase D frontend halves, in order 13 → 18.
 
 ## Exact next step
-- Step 20 once docs/DEMO_QUESTIONS.md exists: `cd backend && .venv/bin/python scripts/warm_cache.py` (asks every line ending in "?", reports status/citations/crops; the cache is in memory, so run it after the final backend start), then re-check each answer. Put the final demo files, with readable names, in backend/demo_files/ and rerun scripts/reset_demo.py first.
+- Feature 2: citation excerpts (LLM span validated as verbatim, else best-overlap lines) and a collapsible cleaned full text in the panel.
 
 ## How to run
 ```sh

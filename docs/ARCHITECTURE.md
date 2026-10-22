@@ -44,7 +44,7 @@ Everything lives on disk under backend/data/{ws}/ and survives restarts: workspa
 
 ## Memory
 - Notes: user-written facts saved as markdown in notes/, indexed like documents, and cited with kind "note" (no crop; the UI shows the note text).
-- History: every ask is stored with its question, response, thread_id, created_at, and saved flag.
+- History: every ask is stored with its question, response, thread_id, created_at, and saved flag. Answered questions are saved by default (they appear under Saved answers); not_found ones are not. PATCH saved toggles it.
 - Follow-ups: /ask accepts an optional thread_id. The last 3 questions and answers in the thread go ONLY to the query-expansion step, to resolve references like "that case". Answers must still cite document or note blocks. Previous AI answers are never used as sources.
 
 ## Local folders

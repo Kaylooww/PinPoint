@@ -111,8 +111,15 @@ with TestClient(main.app) as client:
     check("history item shape", set(history[0]) == {"id", "question", "status", "answer_preview", "thread_id", "created_at", "saved"})
     detail = client.get(f"/api/workspaces/{WS}/history/{first['history_id']}").json()
     check("history detail has full response", set(detail) == {"question", "response", "thread_id", "created_at", "saved"} and detail["response"]["citations"])
+    by_id = {h["id"]: h for h in history}
+    check("answered questions are saved by default", by_id[first["history_id"]]["saved"] is True)
+    nf = client.post(f"/api/workspaces/{WS}/ask", json={"question": "What is the client's favorite color?"}).json()
+    nf_item = next(h for h in client.get(f"/api/workspaces/{WS}/history").json() if h["id"] == nf["history_id"])
+    check("not_found questions are not saved", nf["status"] == "not_found" and nf_item["saved"] is False)
+    unsaved = client.patch(f"/api/workspaces/{WS}/history/{first['history_id']}", json={"saved": False}).json()
+    check("unsave answer", unsaved["saved"] is False and unsaved["id"] == first["history_id"])
     saved = client.patch(f"/api/workspaces/{WS}/history/{first['history_id']}", json={"saved": True}).json()
-    check("save answer", saved["saved"] is True and saved["id"] == first["history_id"])
+    check("save answer again", saved["saved"] is True)
     check("unknown history 404", client.get(f"/api/workspaces/{WS}/history/nope").status_code == 404)
 
     stats = client.get(f"/api/workspaces/{WS}/knowledge").json()

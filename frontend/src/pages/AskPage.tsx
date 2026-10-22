@@ -98,7 +98,7 @@ export function AskPage() {
       try {
         const result = await api.ask(id, q, thread ?? undefined)
         setThreadId(result.thread_id)
-        setTurns((list) => [...list, { question: q, response: result, historyId: result.history_id, saved: false }])
+        setTurns((list) => [...list, { question: q, response: result, historyId: result.history_id, saved: result.status === 'answered' }])
       } catch (e) {
         setTurns((list) => [...list, { question: q, saved: false, error: e instanceof Error ? e.message : 'Something went wrong.' }])
       } finally {

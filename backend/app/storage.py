@@ -381,7 +381,8 @@ def add_history(ws: str, question: str, response: dict[str, Any], thread_id: str
         "response": response,
         "thread_id": thread_id,
         "created_at": now_iso(),
-        "saved": False,
+        # Answered questions go to Saved answers automatically; not-found ones stay in History.
+        "saved": response.get("status") == "answered",
     }
     with lock(ws):
         records = list_history_records(ws)
