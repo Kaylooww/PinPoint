@@ -83,14 +83,15 @@ def get_index(ws: str) -> Index:
     return index if index is not None else rebuild(ws)
 
 
-def search(ws: str, query: str, k: int = 6) -> list[tuple[dict[str, Any], float]]:
-    """Top-k blocks with a positive BM25 score, best first."""
+def search(ws: str, query: str, k: int = 6, file_ids: set[str] | None = None) -> list[tuple[dict[str, Any], float]]:
+    """Top-k blocks with a positive BM25 score, best first; only from `file_ids` if given."""
     index = get_index(ws)
     terms = tokenize(query)
     if index.bm25 is None or not terms:
         return []
     scores = index.bm25.get_scores(terms)
-    ranked = sorted(zip(index.blocks, scores), key=lambda pair: pair[1], reverse=True)
+    pairs = [(b, s) for b, s in zip(index.blocks, scores) if file_ids is None or b["file_id"] in file_ids]
+    ranked = sorted(pairs, key=lambda pair: pair[1], reverse=True)
     return [(block, float(score)) for block, score in ranked[:k] if score > 0]
 
 
@@ -141,14 +142,16 @@ def index_vectors(ws: str) -> None:
         embeddings.ensure(ws, get_index(ws).blocks)
 
 
-def hybrid(ws: str, question: str, expansions: list[str], k: int = 6) -> list[tuple[dict[str, Any], float]]:
+def hybrid(
+    ws: str, question: str, expansions: list[str], k: int = 6, file_ids: set[str] | None = None
+) -> list[tuple[dict[str, Any], float]]:
     """Top-k blocks by RRF over BM25 (question + expansions) and cosine similarity to the question.
 
     Falls back to BM25 alone, silently, if embeddings are off or fail, or vectors are missing.
     """
     from . import embeddings
 
-    lexical = search(ws, " ".join([question, *expansions]), k=CANDIDATES)
+    lexical = search(ws, " ".join([question, *expansions]), k=CANDIDATES, file_ids=file_ids)
     if not llm.embeddings_enabled():
         return lexical[:k]
     index = get_index(ws)
@@ -159,6 +162,8 @@ def hybrid(ws: str, question: str, expansions: list[str], k: int = 6) -> list[tu
     vectors = embeddings.ensure(ws, index.blocks, max_new=32)  # retry a few missing ones per ask
     scored = []
     for block in index.blocks:
+        if file_ids is not None and block["file_id"] not in file_ids:
+            continue
         vector = vectors.get(embeddings.text_hash(block["text"]))
         if vector is not None:
             scored.append((block, sum(a * b for a, b in zip(query, vector))))

@@ -57,7 +57,7 @@ Everything lives on disk under backend/data/{ws}/ and survives restarts: workspa
 - Browser alternative: the frontend can let the user pick a folder (File System Access API, or an input with webkitdirectory) and upload its supported files through the normal upload endpoint.
 
 ## API additions
-POST   /api/workspaces/{ws}/ask {"question","thread_id"?} → AskResponse plus {thread_id, history_id}
+POST   /api/workspaces/{ws}/ask {"question","thread_id"?,"file_ids"?} → AskResponse plus {thread_id, history_id}. file_ids restricts retrieval (and context expansion) to those files and skips notes ("Ask about this document"); such asks are cached separately and still go to history.
 GET    /api/workspaces/{ws}/history → HistoryItem[]
 GET    /api/workspaces/{ws}/history/{id} → {question, response: AskResponse, thread_id, created_at, saved}
 PATCH  /api/workspaces/{ws}/history/{id} {"saved": bool} → HistoryItem
@@ -71,12 +71,13 @@ DELETE /api/workspaces/{ws}/folders/{id} → {"ok": true}
 GET    /api/workspaces/{ws}/knowledge → KnowledgeStats
 GET    /api/workspaces/{ws}/files/{file_id}/raw → the original file, inline, with its media type. Only files registered in files.json, looked up by id (ids match [A-Za-z0-9-]+; no paths in the URL). Uploads must resolve inside the workspace's uploads/; folder files only while their source_path is inside their connected folder; symlinks refused. 404 otherwise.
 GET    /api/workspaces/{ws}/files/{file_id}/text → FileText (parsed text by page, for formats browsers can't render: docx, xlsx, pptx)
+GET    /api/workspaces/{ws}/files/{file_id}/pages/{n}.png → a PDF page rendered as an image (mineru read "<page locator>" --format image, cached in crops/pages/). Registered PDFs only, looked up by id, 1 ≤ n ≤ pages; 404 otherwise. Used by the document viewer instead of a PDF library.
 
 HistoryItem: {id, question, status, answer_preview, thread_id, created_at, saved}
 Note: {id, text, created_at}
 Folder: {id, path, file_count, status: "scanning"|"ready"|"failed", last_scanned_at, error?}
 KnowledgeStats: {files, ready_files, pages, passages, notes, folders, last_indexed_at}
-FileText: {id, name, type, pages: {page, blocks: {text, table?}[]}[]}
+FileText: {id, name, type, page_count, pages: {page, blocks: {text, locator, table?, bbox?}[]}[]} (bbox normalized 0–1, for outlining a cited block on the page image)
 FileItem gains: source: "upload"|"folder", source_path?
 Citation gains: kind: "file"|"note". crop_url is null for notes and plain-text files.
 Citation.text is the block's full cleaned text with its line breaks (parser artifacts stripped: page markers, HTML comments, heading and emphasis marks). Citation.excerpt is the short supporting passage: the LLM's per-source span when it is a verbatim substring of the block (whitespace and case normalized; the excerpt is cut from the block, never the LLM's copy), otherwise the 1–3 lines or sentences with the most question and answer-term overlap. Citation.table (only for table blocks) is the block's rows of cells, for rendering as a real table.

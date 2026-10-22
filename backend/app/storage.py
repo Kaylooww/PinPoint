@@ -502,13 +502,27 @@ def file_text(ws: str, file_id: str) -> dict[str, Any] | None:
     pages: dict[int, list[dict[str, Any]]] = {}
     for block in load_blocks(ws):
         if block["file_id"] == file_id:
-            item = {"text": block["text"]}
+            item = {"text": block["text"], "locator": block["locator"]}
             if block.get("table"):
                 item["table"] = block["table"]
+            if block.get("bbox"):
+                item["bbox"] = block["bbox"]
             pages.setdefault(block["page"], []).append(item)
     return {
         "id": record["id"],
         "name": record["name"],
         "type": record["type"],
+        "page_count": max([record.get("pages") or 0, *pages]) if pages else record.get("pages") or 0,
         "pages": [{"page": n, "blocks": pages[n]} for n in sorted(pages)],
     }
+
+
+def page_locator(ws: str, file_id: str, page: int) -> str | None:
+    """doc:{id}/tier:{tier}/page:{n} for a parsed PDF page, from its blocks' locators."""
+    record = next((r for r in list_file_records(ws) if r["id"] == file_id), None) if FILE_ID_RE.match(file_id) else None
+    if record is None or record["type"] != "pdf" or not 1 <= page <= max(record.get("pages") or 0, 1):
+        return None
+    for block in load_blocks(ws):
+        if block["file_id"] == file_id and block["locator"].startswith("doc:"):
+            return re.sub(r"/page:\d+.*$", f"/page:{page}", block["locator"])
+    return None

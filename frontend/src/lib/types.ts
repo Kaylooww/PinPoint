@@ -134,12 +134,16 @@ export type CreateWorkspaceRequest = {
 
 export type FileTextBlock = {
   text: string
+  locator: string
   table?: string[][]
+  /** [x0, y0, x1, y1], normalized 0-1 on the page image. */
+  bbox?: number[]
 }
 
 export type FileText = {
   id: string
   name: string
   type: FileType
+  page_count: number
   pages: { page: number; blocks: FileTextBlock[] }[]
 }

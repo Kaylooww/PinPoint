@@ -271,8 +271,10 @@ def _cite(
     return answer, citations
 
 
-def _extractive(ws: str, question: str, searched_files: int, started: float) -> dict[str, Any]:
-    hits = search.search(ws, question, k=3)
+def _extractive(
+    ws: str, question: str, searched_files: int, started: float, file_ids: set[str] | None = None
+) -> dict[str, Any]:
+    hits = search.search(ws, question, k=3, file_ids=file_ids)
     if not hits:
         return _not_found("No passages in these files match the question.", searched_files, started)
     best = hits[0][1]
@@ -282,18 +284,24 @@ def _extractive(ws: str, question: str, searched_files: int, started: float) -> 
 
 
 def _generate(
-    ws: str, question: str, searched_files: int, started: float, context: list[tuple[str, str]]
+    ws: str,
+    question: str,
+    searched_files: int,
+    started: float,
+    context: list[tuple[str, str]],
+    file_ids: set[str] | None = None,
 ) -> dict[str, Any]:
     """Raises llm.LLMError (except bad JSON, which becomes not_found) so the caller can fall back."""
     try:
         expansions = search.expand_query(question, context)
     except llm.LLMBadJSON:
         expansions = []
-    hits = search.hybrid(ws, question, expansions, k=TOP_K)
+    hits = search.hybrid(ws, question, expansions, k=TOP_K, file_ids=file_ids)
     if not hits:
         return _not_found("No passages in these files match the question.", searched_files, started)
 
-    context = expand_context(search.get_index(ws).blocks, [block for block, _ in hits])
+    pool = [b for b in search.get_index(ws).blocks if file_ids is None or b["file_id"] in file_ids]
+    context = expand_context(pool, [block for block, _ in hits])
     by_id = {f"b{i}": block for i, block in enumerate(context, start=1)}
     passages = "\n\n".join(
         f"[{bid}] ({_source_label(block)})\n{_snippet(block['text'], MAX_BLOCK_CHARS)}"
@@ -326,16 +334,21 @@ def _generate(
     return _response("answered", answer, citations, searched_files, started)
 
 
-def _answer(ws: str, question: str, context: list[tuple[str, str]]) -> dict[str, Any]:
+def _answer(
+    ws: str, question: str, context: list[tuple[str, str]], only: list[str] | None = None
+) -> dict[str, Any]:
     started = time.perf_counter()
     file_ids = _ready_file_ids(ws)
+    restrict = set(only) & set(file_ids) if only else None  # "Ask about this document"
+    if only:
+        file_ids = tuple(sorted(restrict))
     searched_files = len(file_ids)
-    note_ids = tuple(sorted(n["id"] for n in storage.list_notes(ws)))
+    note_ids = () if only else tuple(sorted(n["id"] for n in storage.list_notes(ws)))
     if not file_ids and not note_ids:
-        return _not_found("No files in this workspace are ready yet.", 0, started)
+        return _not_found("No files in this workspace are ready yet." if not only else "This document isn't ready yet.", 0, started)
 
     # Follow-ups depend on the thread, so only stand-alone questions are cached.
-    key = (ws, _normalize(question), file_ids + note_ids)
+    key = (ws, _normalize(question), file_ids + note_ids + (("only",) if only else ()))
     if not context:
         with _cache_guard:
             cached = _cache.get(key)
@@ -344,13 +357,13 @@ def _answer(ws: str, question: str, context: list[tuple[str, str]]) -> dict[str,
 
     cacheable = not context
     if llm.config().provider == "none":
-        response = _extractive(ws, question, searched_files, started)
+        response = _extractive(ws, question, searched_files, started, restrict)
     else:
         try:
-            response = _generate(ws, question, searched_files, started, context)
+            response = _generate(ws, question, searched_files, started, context, restrict)
         except llm.LLMError:
             # LLM down, misconfigured, or timed out: answer from passages, and retry the LLM next time.
-            response = _extractive(ws, question, searched_files, started)
+            response = _extractive(ws, question, searched_files, started, restrict)
             cacheable = False
 
     if response.pop("_nocache", False):
@@ -361,11 +374,11 @@ def _answer(ws: str, question: str, context: list[tuple[str, str]]) -> dict[str,
     return response
 
 
-def ask(ws: str, question: str, thread_id: str | None = None) -> dict[str, Any]:
+def ask(ws: str, question: str, thread_id: str | None = None, file_ids: list[str] | None = None) -> dict[str, Any]:
     """AskResponse plus {thread_id, history_id}; every ask is stored in history."""
     known = thread_id and any(r["thread_id"] == thread_id for r in storage.list_history_records(ws))
     thread_id = thread_id if known else uuid.uuid4().hex[:12]
     context = storage.thread_context(ws, thread_id) if known else []
-    response = _answer(ws, question, context)
+    response = _answer(ws, question, context, file_ids)
     record = storage.add_history(ws, question, response, thread_id)
     return {**response, "thread_id": thread_id, "history_id": record["id"]}

@@ -193,7 +193,7 @@ export function AskPage() {
                     suggestion={i === last && !loading ? turn.response.suggestion : undefined}
                     onSuggestion={(q) => void ask(q, true)}
                     onOpenMatch={(c) =>
-                      setViewing({ id: c.file_id, name: c.file_name, type: fileTypeFromName(c.file_name), page: c.page })
+                      setViewing({ id: c.file_id, name: c.file_name, type: fileTypeFromName(c.file_name), page: c.page, locator: c.locator })
                     }
                     onUpload={() => navigate(`/w/${id}/files`)}
                     onRephrase={() => inputRef.current?.focus()}
@@ -271,7 +271,7 @@ export function AskPage() {
           citation={open.citation}
           total={turns[open.turn].response!.citations.length}
           onClose={closePanel}
-          onOpenDocument={(c) => setViewing({ id: c.file_id, name: c.file_name, type: fileTypeFromName(c.file_name), page: c.page })}
+          onOpenDocument={(c) => setViewing({ id: c.file_id, name: c.file_name, type: fileTypeFromName(c.file_name), page: c.page, locator: c.locator })}
         />
       )}
       {viewing && <DocumentViewer ws={id} file={viewing} onClose={() => setViewing(null)} />}
