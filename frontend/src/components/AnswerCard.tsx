@@ -17,7 +17,7 @@ export const EXTRACTIVE_LABEL = 'Showing matching passages.'
 export function AnswerCard({ response, activeCitationId, onOpenCitation, onFollowUp }: AnswerCardProps) {
   const [copied, setCopied] = useState(false)
   const byId = new Map(response.citations.map((c) => [c.id, c]))
-  const fileCount = new Set(response.citations.map((c) => c.file_id)).size
+  const fileCount = new Set(response.citations.filter((c) => c.kind === 'file').map((c) => c.file_id)).size
   const extractive = response.reason === EXTRACTIVE_LABEL
 
   const copy = async () => {
@@ -39,7 +39,9 @@ export function AnswerCard({ response, activeCitationId, onOpenCitation, onFollo
           <span className="text-eyebrow uppercase">{extractive ? 'Matching passages' : 'Answer'}</span>
         </div>
         <span className="text-label text-muted">
-          From {fileCount} of {response.searched_files} file{response.searched_files === 1 ? '' : 's'}
+          {fileCount === 0
+            ? 'From your notes'
+            : `From ${fileCount} of ${response.searched_files} file${response.searched_files === 1 ? '' : 's'}`}
         </span>
       </header>
 

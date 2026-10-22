@@ -1,5 +1,5 @@
 // In-memory mock backend. Same shapes as the real API (src/lib/types.ts).
-import type { AskResponse, AskResult, CreateWorkspaceRequest, FileItem, FileType, Workspace } from '../lib/types'
+import type { AskResponse, AskResult, CreateWorkspaceRequest, FileItem, FileType, Note, Workspace } from '../lib/types'
 import * as data from './data'
 
 const state = {
@@ -7,6 +7,7 @@ const state = {
   files: { 'reyes-partners': structuredClone(data.reyesFiles) } as Record<string, FileItem[]>,
   // Polls seen per file while queued/parsing; drives the fake progress.
   ticks: {} as Record<string, number>,
+  notes: { 'reyes-partners': structuredClone(data.reyesNotes) } as Record<string, Note[]>,
 }
 
 export function delay(ms = 300): Promise<void> {
@@ -129,6 +130,18 @@ async function answer(ws: string, question: string): Promise<AskResponse> {
   const q = question.toLowerCase()
   const elapsed_ms = Math.round(performance.now() - started)
 
+  const note = (state.notes[ws] ?? []).find((n) => /email|update|contact|phone/.test(q) && /email|phone/.test(n.text.toLowerCase()))
+  if (note) {
+    return {
+      status: 'answered',
+      answer: [{ text: 'The client prefers to be updated by email rather than by phone.', sources: ['c1'] }],
+      citations: [
+        { id: 'c1', number: 1, kind: 'note', file_id: note.id, file_name: 'Note', page: 1, locator: `note:${note.id}`, text: note.text, crop_url: null },
+      ],
+      searched_files: ready,
+      elapsed_ms,
+    }
+  }
   if (!q.includes('color') && /deadline|santos|filing|due|extension/.test(q)) {
     return { ...structuredClone(data.santosAnswer), searched_files: ready, elapsed_ms }
   }
@@ -140,4 +153,23 @@ async function answer(ws: string, question: string): Promise<AskResponse> {
     searched_files: ready,
     elapsed_ms,
   }
+}
+
+export async function listNotes(ws: string): Promise<Note[]> {
+  await delay(200)
+  findWorkspace(ws)
+  return structuredClone(state.notes[ws] ?? [])
+}
+
+export async function addNote(ws: string, text: string): Promise<Note> {
+  await delay(300)
+  findWorkspace(ws)
+  const note: Note = { id: crypto.randomUUID().slice(0, 12), text: text.trim(), created_at: new Date().toISOString() }
+  ;(state.notes[ws] ??= []).unshift(note)
+  return structuredClone(note)
+}
+
+export async function deleteNote(ws: string, noteId: string): Promise<void> {
+  await delay(200)
+  state.notes[ws] = (state.notes[ws] ?? []).filter((n) => n.id !== noteId)
 }

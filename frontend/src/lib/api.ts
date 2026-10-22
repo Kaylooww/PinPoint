@@ -1,5 +1,5 @@
 import * as mock from '../mocks/server'
-import type { AskResult, CreateWorkspaceRequest, FileItem, Workspace } from './types'
+import type { AskResult, CreateWorkspaceRequest, FileItem, Note, Workspace } from './types'
 
 export const USE_MOCKS = import.meta.env.VITE_USE_MOCKS === 'true'
 const API_BASE = (import.meta.env.VITE_API_BASE ?? 'http://localhost:8000').replace(/\/$/, '')
@@ -74,4 +74,15 @@ export const api = {
           `/api/workspaces/${encodeURIComponent(ws)}/ask`,
           json('POST', threadId ? { question, thread_id: threadId } : { question }),
         ),
+
+  listNotes: (ws: string): Promise<Note[]> =>
+    USE_MOCKS ? mock.listNotes(ws) : request(`/api/workspaces/${encodeURIComponent(ws)}/notes`),
+
+  addNote: (ws: string, text: string): Promise<Note> =>
+    USE_MOCKS ? mock.addNote(ws, text) : request(`/api/workspaces/${encodeURIComponent(ws)}/notes`, json('POST', { text })),
+
+  deleteNote: async (ws: string, noteId: string): Promise<void> => {
+    if (USE_MOCKS) return mock.deleteNote(ws, noteId)
+    await request(`/api/workspaces/${encodeURIComponent(ws)}/notes/${encodeURIComponent(noteId)}`, { method: 'DELETE' })
+  },
 }

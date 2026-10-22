@@ -1,4 +1,4 @@
-import { FileText } from 'lucide-react'
+import { FileText, StickyNote } from 'lucide-react'
 import type { Citation } from '../lib/types'
 import { CropImage } from './CropImage'
 
@@ -14,7 +14,7 @@ export function CitationCard({ citation, onOpen, active = false }: CitationCardP
     <button
       type="button"
       onClick={() => onOpen(citation)}
-      aria-label={`Open source ${citation.number}: ${citation.file_name}, page ${citation.page}`}
+      aria-label={`Open source ${citation.number}: ${citation.kind === 'note' ? 'note' : `${citation.file_name}, page ${citation.page}`}`}
       className={`flex w-[264px] flex-col overflow-hidden rounded-card border bg-surface text-left hover:border-accent ${
         active ? 'border-accent' : 'border-border'
       }`}
@@ -24,9 +24,18 @@ export function CitationCard({ citation, onOpen, active = false }: CitationCardP
         <span className="flex size-[18px] shrink-0 items-center justify-center rounded-pill bg-accent-soft text-label text-accent">
           {citation.number}
         </span>
-        <FileText size={14} strokeWidth={1.75} className="shrink-0 text-muted" />
-        <span className="min-w-0 flex-1 truncate text-label text-text">{citation.file_name}</span>
-        <span className="shrink-0 text-label text-muted">p. {citation.page}</span>
+        {citation.kind === 'note' ? (
+          <>
+            <StickyNote size={14} strokeWidth={1.75} className="shrink-0 text-muted" />
+            <span className="min-w-0 flex-1 truncate text-label text-text">Note</span>
+          </>
+        ) : (
+          <>
+            <FileText size={14} strokeWidth={1.75} className="shrink-0 text-muted" />
+            <span className="min-w-0 flex-1 truncate text-label text-text">{citation.file_name}</span>
+            <span className="shrink-0 text-label text-muted">p. {citation.page}</span>
+          </>
+        )}
       </div>
     </button>
   )

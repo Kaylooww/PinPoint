@@ -1,18 +1,19 @@
 # PinPoint — Handoff
 
-Last updated: Thursday 13:37, after Phase C.
+Last updated: Thursday 13:45, after Phase D item 13 (notes).
 
 ## Done (and tested)
 - Phase A 1–6: backend core on MinerU **basic** tier; both samples parse to ready; crops; API end-to-end.
 - Phase B 7–10: components, Ask + citation panel, Files + folder upload, "/" → /w/reyes-partners/ask.
 - Phase C 11–12: mocks off (frontend/.env.local VITE_USE_MOCKS=false); ask() returns AskResult. Browser walkthrough against the real backend passed: upload → parsing → ready → cited answer → crops load → panel → Escape → dark mode → not-found → answer from an uploaded .md (text card, no crop). No console errors or external requests.
-- Phase D backend halves (tests pass): 13 notes, 14 folders, 15 history, 16 threads, 17 knowledge.
+- Phase D 13 Notes: done end to end (Memory tab add/delete, note citation cards, panel). Browser-tested against the real backend in light and dark.
+- Phase D backend halves (tests pass): 14 folders, 15 history, 16 threads, 17 knowledge.
 
 ## In progress
 - Phase D frontend halves, in order 13 → 18.
 
 ## Exact next step
-- 13 Notes UI: Memory tab (add/delete notes; one-line explainer), note citations as note cards on Ask. Then 14 folders UI, 15 history/saved, 16 follow-ups, 17 stats strip, 18 workspaces/sign-in/landing.
+- 14 folders UI: "Add files" menu gets "Connect a local folder" (dialog with path input and the read-only note), connected folders section with Rescan/Disconnect, Folder tag on files. Then, 15 history/saved, 16 follow-ups, 17 stats strip, 18 workspaces/sign-in/landing.
 
 ## How to run
 ```sh

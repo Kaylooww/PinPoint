@@ -1,4 +1,4 @@
-import type { AskResponse, FileItem, Workspace } from '../lib/types'
+import type { AskResponse, FileItem, Note, Workspace } from '../lib/types'
 
 const now = Date.now()
 const hoursAgo = (h: number) => new Date(now - h * 3_600_000).toISOString()
@@ -74,3 +74,7 @@ export const santosAnswer: Omit<AskResponse, 'searched_files' | 'elapsed_ms'> = 
     },
   ],
 }
+
+export const reyesNotes: Note[] = [
+  { id: 'n1', text: 'The client prefers updates by email, not phone calls.', created_at: hoursAgo(5) },
+]

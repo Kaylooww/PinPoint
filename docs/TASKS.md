@@ -23,7 +23,7 @@
 ## Memory and local files
 - [x] Persistence: rebuild indexes on startup, resume interrupted parsing
 - [ ] History, saved answers, follow-up threads (backend done; UI pending)
-- [ ] Notes (indexed and citable) (backend done; UI pending)
+- [x] Notes (indexed and citable)
 - [x] Browser folder upload
 - [ ] Connected local folders with rescan and disconnect (backend done; UI pending)
 - [ ] Knowledge stats (backend done; UI pending)
