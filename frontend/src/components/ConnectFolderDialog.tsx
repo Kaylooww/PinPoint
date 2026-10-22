@@ -1,5 +1,6 @@
-import { FolderOpen, ShieldCheck, X } from 'lucide-react'
+import { FolderOpen, FolderSearch, ShieldCheck, X } from 'lucide-react'
 import { useEffect, useRef, useState, type FormEvent } from 'react'
+import { api } from '../lib/api'
 import { Button } from './Button'
 import { Field } from './Field'
 
@@ -13,14 +14,35 @@ export function ConnectFolderDialog({ onConnect, onClose }: ConnectFolderDialogP
   const [path, setPath] = useState('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [choosing, setChoosing] = useState(false)
+  const [pickerFailed, setPickerFailed] = useState(false)
   const inputRef = useRef<HTMLInputElement>(null)
+  const browseRef = useRef<HTMLButtonElement>(null)
 
   useEffect(() => {
-    inputRef.current?.focus()
+    browseRef.current?.focus()
     const onKey = (e: KeyboardEvent) => e.key === 'Escape' && onClose()
     document.addEventListener('keydown', onKey)
     return () => document.removeEventListener('keydown', onKey)
   }, [onClose])
+
+  // Opens Finder / File Explorer on this computer; the path still goes through POST /folders checks.
+  const browse = async () => {
+    setChoosing(true)
+    setPickerFailed(false)
+    try {
+      const picked = await api.pickFolder()
+      if (picked) {
+        setPath(picked)
+        setError(null)
+      }
+    } catch {
+      setPickerFailed(true)
+      inputRef.current?.focus()
+    } finally {
+      setChoosing(false)
+    }
+  }
 
   const submit = async (e: FormEvent) => {
     e.preventDefault()
@@ -62,15 +84,26 @@ export function ConnectFolderDialog({ onConnect, onClose }: ConnectFolderDialogP
           </button>
         </header>
 
-        <Field
-          ref={inputRef}
-          label="Folder path"
-          value={path}
-          onChange={(e) => setPath(e.target.value)}
-          placeholder="/Users/you/Documents/Reyes Client Files"
-          spellCheck={false}
-          autoComplete="off"
-        />
+        <div className="flex flex-col gap-1.5">
+          <div className="flex items-end gap-2">
+            <Field
+              ref={inputRef}
+              label="Folder path"
+              value={path}
+              onChange={(e) => setPath(e.target.value)}
+              placeholder="/Users/you/Documents/Reyes Client Files"
+              spellCheck={false}
+              autoComplete="off"
+              className="min-w-0 flex-1"
+            />
+            <Button ref={browseRef} variant="secondary" Icon={FolderSearch} onClick={() => void browse()} disabled={choosing}>
+              {choosing ? 'Choosing…' : 'Browse…'}
+            </Button>
+          </div>
+          <p className="text-label text-muted" aria-live="polite">
+            {pickerFailed ? "Couldn't open the folder picker. Type the path instead." : 'Choose a folder, or paste its path.'}
+          </p>
+        </div>
 
         <p className="flex gap-2.5 rounded-control bg-surface-muted px-3.5 py-3 text-small text-muted">
           <ShieldCheck size={16} strokeWidth={1.75} className="mt-0.5 shrink-0 text-success" />
