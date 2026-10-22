@@ -1,0 +1,7 @@
+fastapi
+uvicorn
+python-multipart
+httpx
+rank_bm25
+Pillow
+python-dotenv
