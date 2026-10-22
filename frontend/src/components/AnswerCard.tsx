@@ -80,9 +80,9 @@ export function AnswerCard({ response, activeCitationId, onOpenCitation, onFollo
           ))
           if (group.kind === 'heading') {
             return (
-              <p key={g} className="pt-1 font-sans text-h3 text-text">
+              <h3 key={g} className="pt-1 font-sans text-h3 text-text">
                 {items}
-              </p>
+              </h3>
             )
           }
           if (group.kind === 'bullet' || group.kind === 'numbered') {
