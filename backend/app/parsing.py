@@ -220,6 +220,8 @@ def _parse_job(ws: str, file_id: str) -> None:
         storage.replace_file_blocks(ws, file_id, blocks)
         search.rebuild(ws)
         storage.update_file(ws, file_id, status="ready", pages=pages, progress_label=None)
+        # Vectors for hybrid search; on failure the file stays ready and asks/startup retry.
+        search.index_vectors(ws)
     except Exception as e:  # noqa: BLE001 - any failure marks the file failed, never crashes the worker
         message = str(e) if isinstance(e, ParseError) else f"Couldn't read this file ({type(e).__name__})."
         storage.update_file(ws, file_id, status="failed", progress_label=None, error=message)

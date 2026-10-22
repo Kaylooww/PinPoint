@@ -1,4 +1,5 @@
 import mimetypes
+import threading
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from typing import Any
@@ -21,6 +22,8 @@ async def lifespan(_: FastAPI) -> AsyncIterator[None]:
         search.rebuild(ws)
         parsing.resume_interrupted(ws)
         folders.resume(ws)
+    # Fill in any missing vectors without delaying startup.
+    threading.Thread(target=lambda: [search.index_vectors(ws) for ws in storage.workspace_ids()], daemon=True).start()
     yield
 
 
@@ -69,6 +72,7 @@ def health() -> dict[str, Any]:
     return {
         "ok": True,
         "llm": {k: status.get(k) for k in ("ok", "provider", "model", "mode", "latency_ms", "error")},
+        "embeddings": llm.embed_health(),
         "mineru": parsing.server_status(),
     }
 
@@ -171,6 +175,7 @@ def create_note(ws: str, body: CreateNote) -> dict[str, Any]:
     _require_workspace(ws)
     note = storage.add_note(ws, body.text)
     search.rebuild(ws)
+    search.index_vectors(ws)
     return note
 
 

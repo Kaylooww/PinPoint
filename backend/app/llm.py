@@ -238,3 +238,114 @@ def health(force: bool = False) -> dict[str, Any]:
 
     _health_cache = (now, result)
     return result
+
+
+# Embeddings: the organizers' OpenAI-compatible embedding server (qwen3-embedding).
+
+EMBED_BATCH = 32
+EMBED_RETRY_AFTER_SECONDS = 60.0
+_embed_down_until = 0.0  # after a failure, skip embeddings briefly so asks stay fast
+
+
+@dataclass(frozen=True)
+class EmbedConfig:
+    base: str
+    key: str
+    model: str
+    dimensions: int
+    timeout: float
+
+
+def embed_config() -> EmbedConfig:
+    try:
+        dims = int(os.getenv("EMBED_DIMENSIONS", "512"))
+    except ValueError:
+        dims = 512
+    try:
+        timeout = float(os.getenv("EMBED_TIMEOUT_SECONDS", "3"))
+    except ValueError:
+        timeout = 3.0
+    return EmbedConfig(
+        base=os.getenv("EMBED_BASE", "").strip().rstrip("/"),
+        key=os.getenv("EMBED_KEY", "").strip(),
+        model=os.getenv("EMBED_MODEL", "").strip(),
+        dimensions=dims,
+        timeout=timeout,
+    )
+
+
+def embeddings_enabled() -> bool:
+    """Off with LLM_PROVIDER=none (zero outbound calls) or when EMBED_BASE/EMBED_MODEL are unset."""
+    cfg = embed_config()
+    return config().provider != "none" and bool(cfg.base and cfg.model)
+
+
+def embed(texts: list[str]) -> list[list[float]]:
+    """One vector per text, in order. Raises LLMUnavailable or LLMError; callers fall back to BM25."""
+    global _embed_down_until
+    if not embeddings_enabled():
+        raise LLMUnavailable("Embeddings are off (LLM_PROVIDER=none or EMBED_* not set)")
+    if time.monotonic() < _embed_down_until:
+        raise LLMError("Embedding server failed recently; using BM25 for a minute")
+    try:
+        return _embed(texts)
+    except LLMError:
+        _embed_down_until = time.monotonic() + EMBED_RETRY_AFTER_SECONDS
+        raise
+
+
+def _embed(texts: list[str]) -> list[list[float]]:
+    cfg = embed_config()
+    headers = {"Authorization": f"Bearer {cfg.key}"} if cfg.key else {}
+    vectors: list[list[float]] = []
+    for start in range(0, len(texts), EMBED_BATCH):
+        batch = texts[start : start + EMBED_BATCH]
+        try:
+            res = httpx.post(
+                f"{cfg.base}/embeddings",
+                headers=headers,
+                json={"model": cfg.model, "input": batch, "dimensions": cfg.dimensions},
+                timeout=cfg.timeout,
+            )
+        except httpx.TimeoutException as e:
+            raise LLMError(f"Embedding server timed out after {cfg.timeout:.0f}s") from e
+        except httpx.HTTPError as e:
+            raise LLMError(f"Could not reach the embedding server ({type(e).__name__})") from e
+        if res.status_code >= 400:
+            raise LLMError(f"Embedding server error (HTTP {res.status_code})")
+        try:
+            data = sorted(res.json()["data"], key=lambda d: d.get("index", 0))
+            batch_vectors = [list(map(float, d["embedding"])) for d in data]
+        except (ValueError, KeyError, TypeError) as e:
+            raise LLMError("Embedding server returned an unexpected response shape") from e
+        if len(batch_vectors) != len(batch):
+            raise LLMError("Embedding server returned the wrong number of vectors")
+        vectors.extend(batch_vectors)
+    return vectors
+
+
+_embed_health_cache: tuple[float, dict[str, Any]] | None = None
+
+
+def embed_health(force: bool = False) -> dict[str, Any]:
+    """{"ok", "model", "dimensions", "latency_ms", "error"?} from one tiny call, cached for a minute."""
+    global _embed_health_cache
+    now = time.monotonic()
+    if not force and _embed_health_cache and now - _embed_health_cache[0] < _HEALTH_TTL_SECONDS:
+        return _embed_health_cache[1]
+    cfg = embed_config()
+    result: dict[str, Any] = {"ok": False, "model": cfg.model or None, "dimensions": None, "latency_ms": None}
+    if not embeddings_enabled():
+        result["error"] = "off (LLM_PROVIDER=none or EMBED_* not set); search uses BM25 only"
+    else:
+        started = time.perf_counter()
+        try:
+            dims = len(embed(["ping"])[0])
+            result.update(ok=dims == cfg.dimensions, dimensions=dims)
+            if dims != cfg.dimensions:
+                result["error"] = f"expected {cfg.dimensions} dimensions, got {dims}"
+        except LLMError as e:
+            result["error"] = str(e)
+        result["latency_ms"] = round((time.perf_counter() - started) * 1000)
+    _embed_health_cache = (now, result)
+    return result
