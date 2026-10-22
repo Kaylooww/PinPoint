@@ -53,6 +53,7 @@ class ConnectFolder(BaseModel):
 class AskRequest(BaseModel):
     question: str = Field(min_length=1, max_length=1000)
     thread_id: str | None = Field(default=None, max_length=64)
+    file_ids: list[str] | None = Field(default=None, max_length=50)
 
 
 class SaveHistory(BaseModel):
@@ -119,6 +120,17 @@ def raw_file(ws: str, file_id: str) -> FileResponse:
     return FileResponse(path, media_type=media_type, filename=name, content_disposition_type="inline")
 
 
+@app.get("/api/workspaces/{ws}/files/{file_id}/pages/{page}.png")
+def page_png(ws: str, file_id: str, page: int) -> FileResponse:
+    """A PDF page rendered as an image (registered files only, by id; 404 otherwise)."""
+    _require_workspace(ws)
+    locator = storage.page_locator(ws, file_id, page)
+    path = crops.page_image(ws, locator) if locator else None
+    if path is None:
+        raise HTTPException(status_code=404, detail="Page not found")
+    return FileResponse(path, media_type="image/png")
+
+
 @app.get("/api/workspaces/{ws}/files/{file_id}/text")
 def file_text(ws: str, file_id: str) -> dict[str, Any]:
     _require_workspace(ws)
@@ -131,7 +143,7 @@ def file_text(ws: str, file_id: str) -> dict[str, Any]:
 @app.post("/api/workspaces/{ws}/ask")
 def ask(ws: str, body: AskRequest) -> dict[str, Any]:
     _require_workspace(ws)
-    return answer.ask(ws, body.question.strip(), body.thread_id)
+    return answer.ask(ws, body.question.strip(), body.thread_id, body.file_ids)
 
 
 @app.get("/api/workspaces/{ws}/history")

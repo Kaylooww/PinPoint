@@ -51,6 +51,12 @@ with TestClient(main.app) as client:
             status = client.get(f"/api/workspaces/{WS}/files/{bad}/{kind}").status_code
             check(f"{kind} 404 for id {bad!r} (got {status})", status == 404)
 
+    for bad in ["unknown123456", "..%2F..%2Fetc", uploaded["id"]]:  # last one: a .txt, not a PDF
+        status = client.get(f"/api/workspaces/{WS}/files/{bad}/pages/1.png").status_code
+        check(f"page image 404 for {bad!r} (got {status})", status == 404)
+    text = client.get(f"/api/workspaces/{WS}/files/{uploaded['id']}/text").json()
+    check("text has page_count and block locators", text["page_count"] == 1 and "locator" in text["pages"][0]["blocks"][0])
+
     # A record that points outside uploads/ (tampered files.json) is refused.
     records = storage.list_file_records(WS)
     records[0]["path"] = "/etc/hosts"

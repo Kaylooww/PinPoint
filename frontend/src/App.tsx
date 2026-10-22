@@ -4,6 +4,7 @@ import { AskPage } from './pages/AskPage'
 import { FilesPage } from './pages/FilesPage'
 import { LandingPage } from './pages/LandingPage'
 import { MemoryPage } from './pages/MemoryPage'
+import { SelectClientPage } from './pages/SelectClientPage'
 import { SettingsPage } from './pages/SettingsPage'
 import { SignInPage } from './pages/SignInPage'
 import { WorkspaceLayout } from './pages/WorkspaceLayout'
@@ -19,6 +20,9 @@ export default function App() {
       <Route element={<AppShell />}>
         <Route path="/workspaces" element={<WorkspacesPage />} />
         <Route path="/settings" element={<SettingsPage />} />
+        <Route path="/files" element={<SelectClientPage tab="files" />} />
+        <Route path="/ask" element={<SelectClientPage tab="ask" />} />
+        <Route path="/memory" element={<SelectClientPage tab="memory" />} />
         <Route path="/w/:id" element={<WorkspaceLayout />}>
           <Route index element={<Navigate to="files" replace />} />
           <Route path="files" element={<FilesPage />} />

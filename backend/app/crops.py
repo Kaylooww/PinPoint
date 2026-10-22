@@ -45,6 +45,14 @@ def _read_image(locator: str, out: Path) -> bool:
     return proc.returncode == 0 and out.exists() and out.stat().st_size > 0
 
 
+def page_image(ws: str, page_locator: str) -> Path | None:
+    """Rendered page image (mineru read --format image), cached in crops/pages/."""
+    out = storage.crops_dir(ws) / "pages" / (re.sub(r"[^a-z0-9]+", "-", page_locator.lower()).strip("-") + ".png")
+    out.parent.mkdir(parents=True, exist_ok=True)
+    with _lock:
+        return out if out.exists() or _read_image(page_locator, out) else None
+
+
 def _page_image(ws: str, block: dict[str, Any]) -> Path | None:
     page_locator = block["locator"].rsplit("/block:", 1)[0]
     out = storage.crops_dir(ws) / "pages" / (re.sub(r"[^a-z0-9]+", "-", page_locator.lower()).strip("-") + ".png")

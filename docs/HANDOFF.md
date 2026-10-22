@@ -1,6 +1,6 @@
 # PinPoint — Handoff
 
-Last updated: Thursday 14:40, hybrid retrieval (BM25 + qwen3 embeddings, RRF). Branch: hybrid-retrieval (on top of memory-viewer-demo / PR #5).
+Last updated: Thursday 15:10, all four items done; final demo run passed. Branch: demo-polish (PR #7, stacked on #6 and #5 — merge #5, #6, #7 in order).
 
 ## Done (and tested)
 - Phase A 1–6: backend core on MinerU **basic** tier; both samples parse to ready; crops; API end-to-end.
@@ -13,17 +13,19 @@ Last updated: Thursday 14:40, hybrid retrieval (BM25 + qwen3 embeddings, RRF). B
 - Phase D 17: knowledge stats strip at the top of the Files tab (GET /knowledge), refreshed when files change. Browser-checked against the API.
 
 ## In progress
+- Final run (both clients, light + dark, real backend): 11/11 DEMO.md questions over the API; browser: Select client, upload → ready, "Who is the renter?" cited with crops, panel excerpt, modal at the cited page with outline, zoom, Esc, follow-up, not-found, Memory auto-saved, letter date (March 2, 2026), August 15 invoice → Did you mean + closest passages → suggestion answers 24,640.00, Ask about this document with citation outline. One real bug fixed in the run: near matches only looked at the 12 context blocks, so a suggestion naming the invoice number was dropped; they now cover facts from all blocks of the retrieved files (facts still verified verbatim), ties to LLM-named passages then rank.
+- Latest request, 4 items: (1) letter-date bug — DONE: context expansion (6 retrieved → + page-1 header round-robin → + ±1 neighbours, cap 12) and date words in query expansion; "When was this letter sent?" → March 2, 2026 citing the date block; all 11 demo questions OK. Answer max_tokens stays 1200 (500 truncated JSON). (2) "Did you mean…?" on not_found — DONE (near_matches + validated suggestion; one-question rule; button asks in the same thread; near-match cards open the viewer); (3) document viewer as a centered modal — DONE (90%×85% over a scrim, focus trap + return, Esc; PDF pages as backend PNGs lazy-loaded; zoom −/%/+/fit + Ctrl/Cmd ±; page n of N; cited block outlined from its bbox; collapsible Ask-about-this-document via POST /ask file_ids; opened from file rows, the citation panel, and near matches — citation cards still open the panel first, whose Open document opens the modal); (4) sidebar Files → Select client screen — DONE: sidebar Files, Ask, and Memory all used to jump to the last-used client, so all three now open /files, /ask, /memory ("Select client", WorkspaceCard grid) and picking a client goes to /w/:id/<tab>. Three routes added in App.tsx; /, /landing, /signin untouched.
 - Hybrid retrieval DONE: llm.embed() → organizers' embedding server (EMBED_* in backend/.env), vectors cached in data/{ws}/embeddings.json by text hash, RRF(k=60) of BM25 + cosine, query instruction prefix kept (12/12 answers in top 6 vs 11/12 without, 10/12 BM25 alone). Silent BM25 fallback when embeddings are off/failing (60 s circuit breaker), zero outbound calls with LLM_PROVIDER=none. "Who is the renter?" now answers. /api/health has an embeddings entry.
 - Final demo run (both workspaces, light + dark, real backend): every step passes — upload → ready, cited answer saved by default, crops, panel excerpt, Open document (PDF at the cited page), follow-up, not-found, Memory; Villanueva files, receipt photo viewer, CSV as a table, memo, three questions incl. not-found. No real bugs found in this run (two failures were test-script step-order issues).
 - Four late features, one slice at a time: (1) auto-save answered questions — DONE; (2) readable excerpt + full text in the citation panel — DONE (Citation.excerpt always literally from the block; Citation.table for tables; collapsible full text; LLM max_tokens raised because reasoning tokens truncated the JSON); (3) document viewer + raw/text endpoints — DONE (overlay from file rows and the citation panel's Open document; PDF in the browser's viewer at #page=N, image fit/actual size, txt/md/csv text, office files as parsed pages; the parsed-pages view is untested in the browser for lack of an office file); (4) second demo client "Villanueva Accounting" with fictional generated documents — DONE (scripts/make_demo_files.py; reset_demo.py rebuilds both; 6 questions verified and listed in DEMO.md). The document viewer is an overlay panel, not a route, so App.tsx routes stay untouched for the Landing/Sign in patch.
-- Phase E (started early; 18b Landing/Sign in comes as a patch from another session — don't touch LandingPage.tsx, SignInPage.tsx, or the routes in App.tsx).
+- Phase E (started early; 18b Landing/Sign in comes as a patch from another session — don't touch LandingPage.tsx, SignInPage.tsx, or the /, /landing, /signin routes in App.tsx; /files, /ask, /memory were added for Select client).
 - Full demo run (light + dark) against the real backend: all steps pass after two fixes — (1) crops were unreadable (wide paragraph strips shrank to ~25 px): cards now fit the crop's height and show the start of the passage; the panel is 560 px wide and very wide strips keep a 112 px height and scroll sideways; (2) the DEMO.md follow-up "Who is the renter?" returned Not found ("renter" is in nearly every clause) → script now uses "Who is the renter named in that agreement?".
 - Step 22 drafted: docs/DEMO.md (start order, checklist, click-by-click script with questions verified on the samples, fallback plan). Swap in docs/DEMO_QUESTIONS.md when it exists.
 - Step 19 done: `backend/scripts/reset_demo.py` rebuilds Reyes & Partners and waits until all files are ready. backend/demo_files/ doesn't exist yet, so it uses backend/samples/ (2 files, 3 pages).
 - Phase D frontend halves, in order 13 → 18.
 
 ## Exact next step
-- Merge the PR. When docs/DEMO_QUESTIONS.md exists (DEMO.md lists 10 verified suggestions), run reset_demo.py, then warm_cache.py as the last step after the final backend start. warm_cache.py takes --workspace for Villanueva questions.
+- Merge PRs #5 → #6 → #7. At 4:00 PM Phase E: reset_demo.py, warm_cache.py (after the final backend start), DEMO.md checklist, tag demo-final.
 
 ## How to run
 ```sh
@@ -34,9 +36,10 @@ cd frontend && npm run dev   # http://localhost:5173
 Reset both demo workspaces (servers running): `cd backend && .venv/bin/python scripts/reset_demo.py`
 Warm the answer cache (after the final backend start): `cd backend && .venv/bin/python scripts/warm_cache.py`
 
-Tests (throwaway data dir): `cd backend && .venv/bin/python tests/test_core_fixture.py`, `tests/test_folders.py`, and `tests/test_excerpts.py` (no network), and `tests/test_documents.py` (raw/text endpoints refuse unknown and path-like ids), and `tests/test_hybrid.py` (embedding fallbacks offline, zero outbound with LLM_PROVIDER=none, plus a live "Who is the renter?" check; `--offline` skips the live part). Add `LLM_PROVIDER=none` to test extractive mode.
+Tests (throwaway data dir): `cd backend && .venv/bin/python tests/test_core_fixture.py`, `tests/test_folders.py`, and `tests/test_excerpts.py` (no network), and `tests/test_documents.py` (raw/text endpoints refuse unknown and path-like ids), and `tests/test_context.py` and `tests/test_suggestions.py` (`--offline` skips their live parts), `tests/test_hybrid.py` (embedding fallbacks offline, zero outbound with LLM_PROVIDER=none, plus a live "Who is the renter?" check; `--offline` skips the live part). Add `LLM_PROVIDER=none` to test extractive mode.
 
 ## Known issues
+- "Who signed the engagement letter for the bakery?" (not a demo question) returns not_found: the generated letter's two-column signature block splits names from titles. Don't use it in the demo.
 - The embedding server (EMBED_BASE) is only reachable on the venue network. Elsewhere, /api/health shows embeddings not ok and search uses BM25 alone (answers still work).
 - uvicorn --reload re-seeds an empty Reyes & Partners on restart; reset_demo.py now tolerates that race (it happened once when a script edit triggered a reload mid-reset).
 - A git checkout/pull in this folder while `npm run dev` runs can stall Vite's Tailwind step (pages lose all styling). Fix: restart `npm run dev`. Happened once at 13:54.

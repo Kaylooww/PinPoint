@@ -1,14 +1,15 @@
-import { AlertTriangle, Clock, CornerDownRight, Loader2, Plus, Search, Upload } from 'lucide-react'
+import { AlertTriangle, Clock, CornerDownRight, Loader2, Plus, Search, Sparkle, Upload } from 'lucide-react'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { AnswerCard } from '../components/AnswerCard'
+import { CitationCard } from '../components/CitationCard'
 import { Button } from '../components/Button'
 import { CitationPanel } from '../components/CitationPanel'
 import { DocumentViewer, type ViewerFile } from '../components/DocumentViewer'
 import { SearchInput } from '../components/SearchInput'
 import { api } from '../lib/api'
 import { dayLabel, fileTypeFromName, formatSeconds } from '../lib/format'
-import type { AskResponse, Citation, HistoryItem } from '../lib/types'
+import type { AskResponse, Citation, HistoryItem, Suggestion } from '../lib/types'
 import { useWorkspaceOutlet } from '../lib/workspaceOutlet'
 
 /** One question in the current thread and what came back. */
@@ -90,8 +91,8 @@ export function AskPage() {
   }, [turns.length, loading])
 
   const ask = useCallback(
-    async (q: string) => {
-      const thread = followingUp ? threadId : null
+    async (q: string, inThread = false) => {
+      const thread = followingUp || inThread ? threadId : null
       if (params.has('h')) setParams({}, { replace: true })
       setOpen(null)
       setLoading(true)
@@ -188,6 +189,12 @@ export function AskPage() {
                     reason={turn.response.reason}
                     workspaceName={workspace?.name}
                     fileCount={turn.response.searched_files}
+                    nearMatches={turn.response.near_matches ?? []}
+                    suggestion={i === last && !loading ? turn.response.suggestion : undefined}
+                    onSuggestion={(q) => void ask(q, true)}
+                    onOpenMatch={(c) =>
+                      setViewing({ id: c.file_id, name: c.file_name, type: fileTypeFromName(c.file_name), page: c.page, locator: c.locator })
+                    }
                     onUpload={() => navigate(`/w/${id}/files`)}
                     onRephrase={() => inputRef.current?.focus()}
                   />
@@ -264,7 +271,7 @@ export function AskPage() {
           citation={open.citation}
           total={turns[open.turn].response!.citations.length}
           onClose={closePanel}
-          onOpenDocument={(c) => setViewing({ id: c.file_id, name: c.file_name, type: fileTypeFromName(c.file_name), page: c.page })}
+          onOpenDocument={(c) => setViewing({ id: c.file_id, name: c.file_name, type: fileTypeFromName(c.file_name), page: c.page, locator: c.locator })}
         />
       )}
       {viewing && <DocumentViewer ws={id} file={viewing} onClose={() => setViewing(null)} />}
@@ -301,12 +308,26 @@ type NotFoundCardProps = {
   reason?: string
   workspaceName?: string
   fileCount: number
+  nearMatches: Citation[]
+  suggestion?: Suggestion
+  onSuggestion: (question: string) => void
+  onOpenMatch: (citation: Citation) => void
   onUpload: () => void
   onRephrase: () => void
 }
 
-// Figma 07 States (9:971), "Not found".
-function NotFoundCard({ reason, workspaceName, fileCount, onUpload, onRephrase }: NotFoundCardProps) {
+// Figma 07 States (9:971), "Not found", plus "Did you mean…?" and the closest passages.
+function NotFoundCard({
+  reason,
+  workspaceName,
+  fileCount,
+  nearMatches,
+  suggestion,
+  onSuggestion,
+  onOpenMatch,
+  onUpload,
+  onRephrase,
+}: NotFoundCardProps) {
   return (
     <div className="flex flex-col gap-3 rounded-card border border-border bg-surface px-6 py-[22px] shadow-subtle">
       <p className="flex items-center gap-2 text-eyebrow text-muted uppercase">
@@ -316,6 +337,27 @@ function NotFoundCard({ reason, workspaceName, fileCount, onUpload, onRephrase }
       <p className="text-[16px] leading-[26px] text-text">
         {reason || `None of the ${fileCount} files in ${workspaceName ?? 'this workspace'} answer this question.`}
       </p>
+      {suggestion && (
+        <button
+          type="button"
+          onClick={() => onSuggestion(suggestion.question)}
+          title={suggestion.question}
+          className="flex items-center gap-2 self-start rounded-control bg-accent-soft px-3.5 py-2 text-left text-body font-medium text-accent hover:bg-accent hover:text-on-accent"
+        >
+          <Sparkle size={16} strokeWidth={1.75} className="shrink-0" />
+          {suggestion.text}
+        </button>
+      )}
+      {nearMatches.length > 0 && (
+        <div className="flex flex-col gap-2 pt-1">
+          <p className="text-eyebrow text-muted uppercase">Closest passages</p>
+          <div className="flex flex-wrap gap-3">
+            {nearMatches.map((c) => (
+              <CitationCard key={c.id} citation={c} onOpen={onOpenMatch} />
+            ))}
+          </div>
+        </div>
+      )}
       <p className="text-small text-muted">Try uploading the document that covers it, or rephrase your question.</p>
       <div className="flex gap-1 pt-1">
         <Button variant="secondary" onClick={onUpload}>

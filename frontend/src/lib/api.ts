@@ -52,6 +52,13 @@ export function rawUrl(ws: string, fileId: string): string | null {
   return USE_MOCKS ? null : `${API_BASE}/api/workspaces/${encodeURIComponent(ws)}/files/${encodeURIComponent(fileId)}/raw`
 }
 
+/** URL of a PDF page rendered as an image by the backend. null in mock mode. */
+export function pageUrl(ws: string, fileId: string, page: number): string | null {
+  return USE_MOCKS
+    ? null
+    : `${API_BASE}/api/workspaces/${encodeURIComponent(ws)}/files/${encodeURIComponent(fileId)}/pages/${page}.png`
+}
+
 /** Absolute URL for a path returned by the API (crops), or a local mock asset. */
 export function assetUrl(path: string): string {
   return USE_MOCKS || /^https?:/.test(path) ? path : `${API_BASE}${path}`
@@ -83,12 +90,12 @@ export const api = {
     return request(`/api/workspaces/${encodeURIComponent(ws)}/files`, { method: 'POST', body })
   },
 
-  ask: (ws: string, question: string, threadId?: string): Promise<AskResult> =>
+  ask: (ws: string, question: string, threadId?: string, fileIds?: string[]): Promise<AskResult> =>
     USE_MOCKS
       ? mock.ask(ws, question, threadId)
       : request(
           `/api/workspaces/${encodeURIComponent(ws)}/ask`,
-          json('POST', threadId ? { question, thread_id: threadId } : { question }),
+          json('POST', { question, ...(threadId ? { thread_id: threadId } : {}), ...(fileIds ? { file_ids: fileIds } : {}) }),
         ),
 
   listNotes: (ws: string): Promise<Note[]> =>

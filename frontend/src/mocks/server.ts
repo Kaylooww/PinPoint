@@ -156,6 +156,7 @@ async function answer(ws: string, question: string): Promise<AskResponse> {
     answer: [],
     citations: [],
     reason: `None of the ${ready} files in this workspace mention this.`,
+    near_matches: [],
     searched_files: ready,
     elapsed_ms,
   }
@@ -292,8 +293,9 @@ export async function getFileText(ws: string, fileId: string): Promise<FileText>
     id: fileId,
     name: file?.name ?? cited[0]?.file_name ?? 'Document',
     type: file?.type ?? 'pdf',
+    page_count: Math.max(1, ...cited.map((c) => c.page)),
     pages: cited.length
-      ? cited.map((c) => ({ page: c.page, blocks: [{ text: c.text }] }))
-      : [{ page: 1, blocks: [{ text: 'Mock mode has no parsed text for this file.' }] }],
+      ? cited.map((c) => ({ page: c.page, blocks: [{ text: c.text, locator: c.locator }] }))
+      : [{ page: 1, blocks: [{ text: 'Mock mode has no parsed text for this file.', locator: 'mock' }] }],
   }
 }
