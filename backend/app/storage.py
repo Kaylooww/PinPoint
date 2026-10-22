@@ -237,3 +237,60 @@ def replace_file_blocks(ws: str, file_id: str, blocks: list[dict[str, Any]]) -> 
     with lock(ws):
         kept = [b for b in load_blocks(ws) if b["file_id"] != file_id]
         _write_json(ws_dir(ws) / "blocks.json", kept + blocks)
+
+
+# Notes: user-written facts, one markdown file per note in notes/, searched and cited like documents.
+
+NOTE_ID_RE = re.compile(r"^[a-f0-9]{12}$")
+
+
+def notes_dir(ws: str) -> Path:
+    return ws_dir(ws) / "notes"
+
+
+def _read_note(path: Path) -> dict[str, Any] | None:
+    raw = path.read_text(encoding="utf-8")
+    match = re.match(r"^---\ncreated_at: (.+)\n---\n(.*)$", raw, re.DOTALL)
+    if not match:
+        return None
+    return {"id": path.stem, "text": match.group(2).strip(), "created_at": match.group(1).strip()}
+
+
+def list_notes(ws: str) -> list[dict[str, Any]]:
+    notes = [n for p in notes_dir(ws).glob("*.md") if (n := _read_note(p))]
+    return sorted(notes, key=lambda n: n["created_at"], reverse=True)
+
+
+def add_note(ws: str, text: str) -> dict[str, Any]:
+    note = {"id": uuid.uuid4().hex[:12], "text": text.strip(), "created_at": now_iso()}
+    path = notes_dir(ws) / f"{note['id']}.md"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(f"---\ncreated_at: {note['created_at']}\n---\n{note['text']}\n", encoding="utf-8")
+    touch_workspace(ws)
+    return note
+
+
+def delete_note(ws: str, note_id: str) -> None:
+    if not NOTE_ID_RE.match(note_id):
+        raise NotFound(note_id)
+    path = notes_dir(ws) / f"{note_id}.md"
+    if not path.exists():
+        raise NotFound(note_id)
+    path.unlink()
+    touch_workspace(ws)
+
+
+def note_blocks(ws: str) -> list[dict[str, Any]]:
+    """Notes as searchable blocks (kind "note"; no page image, so no crop)."""
+    return [
+        {
+            "id": f"note-{n['id']}",
+            "kind": "note",
+            "file_id": n["id"],
+            "file_name": "Note",
+            "page": 1,
+            "locator": f"note:{n['id']}",
+            "text": n["text"],
+        }
+        for n in list_notes(ws)
+    ]

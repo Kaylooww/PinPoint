@@ -77,3 +77,18 @@ with TestClient(main.app) as client:
     check("empty workspace -> not_found", empty["status"] == "not_found" and empty["searched_files"] == 0)
 
 print("all checks passed")
+
+# Notes: saved, indexed, cited as kind "note" with no crop, and deletable.
+with TestClient(main.app) as client:
+    note = client.post(f"/api/workspaces/{WS}/notes", json={"text": "The client prefers updates by email, not phone calls."}).json()
+    check("note shape", set(note) == {"id", "text", "created_at"})
+    check("notes listed", [n["id"] for n in client.get(f"/api/workspaces/{WS}/notes").json()] == [note["id"]])
+    r3 = client.post(f"/api/workspaces/{WS}/ask", json={"question": "How does the client want to be updated?"}).json()
+    print(json.dumps(r3, indent=1))
+    notes_cited = [c for c in r3["citations"] if c["kind"] == "note"]
+    check("answer cites the note", r3["status"] == "answered" and notes_cited and notes_cited[0]["crop_url"] is None)
+    check("delete note", client.delete(f"/api/workspaces/{WS}/notes/{note['id']}").json() == {"ok": True})
+    check("deleted note 404", client.delete(f"/api/workspaces/{WS}/notes/{note['id']}").status_code == 404)
+    check("notes empty", client.get(f"/api/workspaces/{WS}/notes").json() == [])
+
+print("note checks passed")

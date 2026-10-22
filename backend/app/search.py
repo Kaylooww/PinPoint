@@ -68,7 +68,7 @@ _guard = threading.Lock()
 
 
 def rebuild(ws: str) -> Index:
-    blocks = [b for b in storage.load_blocks(ws) if b.get("text", "").strip()]
+    blocks = [b for b in storage.load_blocks(ws) + storage.note_blocks(ws) if b.get("text", "").strip()]
     corpus = [tokenize(b["text"]) for b in blocks]
     bm25 = BM25(corpus) if corpus and any(corpus) else None
     index = Index(blocks=blocks, bm25=bm25)

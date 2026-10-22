@@ -37,6 +37,10 @@ class CreateWorkspace(BaseModel):
     industry: str = Field(min_length=1, max_length=60)
 
 
+class CreateNote(BaseModel):
+    text: str = Field(min_length=1, max_length=4000)
+
+
 class AskRequest(BaseModel):
     question: str = Field(min_length=1, max_length=1000)
 
@@ -92,6 +96,31 @@ async def upload_files(ws: str, files: list[UploadFile] = File(...)) -> list[dic
 def ask(ws: str, body: AskRequest) -> dict[str, Any]:
     _require_workspace(ws)
     return answer.ask(ws, body.question.strip())
+
+
+@app.get("/api/workspaces/{ws}/notes")
+def list_notes(ws: str) -> list[dict[str, Any]]:
+    _require_workspace(ws)
+    return storage.list_notes(ws)
+
+
+@app.post("/api/workspaces/{ws}/notes")
+def create_note(ws: str, body: CreateNote) -> dict[str, Any]:
+    _require_workspace(ws)
+    note = storage.add_note(ws, body.text)
+    search.rebuild(ws)
+    return note
+
+
+@app.delete("/api/workspaces/{ws}/notes/{note_id}")
+def delete_note(ws: str, note_id: str) -> dict[str, bool]:
+    _require_workspace(ws)
+    try:
+        storage.delete_note(ws, note_id)
+    except storage.NotFound:
+        raise HTTPException(status_code=404, detail="Note not found") from None
+    search.rebuild(ws)
+    return {"ok": True}
 
 
 @app.get("/api/crops/{crop_id}.png")

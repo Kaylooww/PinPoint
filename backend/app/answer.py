@@ -31,6 +31,12 @@ _cache: dict[tuple[str, str, tuple[str, ...]], dict[str, Any]] = {}
 _cache_guard = threading.Lock()
 
 
+def _source_label(block: dict[str, Any]) -> str:
+    if block.get("kind") == "note":
+        return "Note saved by the user about this client"
+    return f"{block['file_name']}, page {block['page']}"
+
+
 def _normalize(question: str) -> str:
     return re.sub(r"\s+", " ", question.strip().lower())
 
@@ -83,13 +89,13 @@ def _cite(ws: str, sentences: list[tuple[str, list[dict[str, Any]]]]) -> tuple[l
                     {
                         "id": f"c{n}",
                         "number": n,
-                        "kind": "file",
+                        "kind": block.get("kind", "file"),
                         "file_id": block["file_id"],
                         "file_name": block["file_name"],
                         "page": block["page"],
                         "locator": block["locator"],
                         "text": _snippet(block["text"], 2000),
-                        "crop_url": crops.crop_url(ws, block),
+                        "crop_url": crops.crop_url(ws, block) if block.get("kind", "file") == "file" else None,
                     }
                 )
             cid = f"c{numbers[block['id']]}"
@@ -121,7 +127,7 @@ def _generate(ws: str, question: str, searched_files: int, started: float) -> di
 
     by_id = {f"b{i}": block for i, (block, _) in enumerate(hits, start=1)}
     passages = "\n\n".join(
-        f"[{bid}] ({block['file_name']}, page {block['page']})\n{_snippet(block['text'], MAX_BLOCK_CHARS)}"
+        f"[{bid}] ({_source_label(block)})\n{_snippet(block['text'], MAX_BLOCK_CHARS)}"
         for bid, block in by_id.items()
     )
     try:
@@ -152,10 +158,11 @@ def ask(ws: str, question: str) -> dict[str, Any]:
     started = time.perf_counter()
     file_ids = _ready_file_ids(ws)
     searched_files = len(file_ids)
-    if not file_ids:
+    note_ids = tuple(sorted(n["id"] for n in storage.list_notes(ws)))
+    if not file_ids and not note_ids:
         return _not_found("No files in this workspace are ready yet.", 0, started)
 
-    key = (ws, _normalize(question), file_ids)
+    key = (ws, _normalize(question), file_ids + note_ids)
     with _cache_guard:
         cached = _cache.get(key)
     if cached is not None:
