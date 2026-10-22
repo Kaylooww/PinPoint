@@ -26,7 +26,7 @@ Before any task, read this file, then docs/PRODUCT.md, docs/ARCHITECTURE.md, and
 1. At runtime, the only network calls allowed are to the configured LLM provider, the organizers' embedding server (EMBED_BASE), and local services on this machine (the MinerU server). No CDNs, Google Fonts, analytics, or other external APIs. With LLM_PROVIDER=none, the app makes no outbound calls at all, including to the embedding server. Breaking this can disqualify the team.
 2. Never print or commit API keys. Keys live in backend/.env.
 3. Never guess MinerU's output format. Run it on a real sample file and inspect the JSON before writing any parser.
-4. Answers come only from retrieved document blocks. Every answer sentence must cite at least one source block. Anything unsupported becomes "not_found". Enforce this in code, not only in the prompt.
+4. Answers come only from the document blocks given to the LLM (retrieved blocks plus their context expansion, at most 12). Every answer sentence must cite at least one source block. Anything unsupported becomes "not_found". Enforce this in code, not only in the prompt.
 5. Totals and calculations are computed in Python, never by the LLM.
 6. Use design tokens (CSS variables) for every color. No hard-coded hex values in components.
 7. docs/ARCHITECTURE.md holds the API contract. If you change it, update the doc, the backend, and frontend/src/lib/types.ts together.

@@ -16,6 +16,8 @@ from typing import Any
 from . import crops, excerpts, llm, search, storage
 
 TOP_K = 6
+MAX_CONTEXT_BLOCKS = 12
+BLOCK_POSITION = re.compile(r"-p(\d+)-b(\d+)$")
 MAX_BLOCK_CHARS = 1200
 # The model reasons before answering and those tokens count toward max_tokens: about 450 of a
 # 500 budget went to reasoning, which cut the JSON off mid-quote. Leave room for both.
@@ -73,6 +75,54 @@ def _response(
     if reason:
         response["reason"] = reason
     return response
+
+
+def expand_context(
+    blocks: list[dict[str, Any]], hits: list[dict[str, Any]], cap: int = MAX_CONTEXT_BLOCKS
+) -> list[dict[str, Any]]:
+    """Retrieved blocks plus their neighbours (same page, ±1) and the first 3 blocks of each
+    file's page 1 (letterhead, date, addressee), deduplicated, in document order per file,
+    at most `cap`. Short blocks like a date line rarely match the question's words, so this
+    is how they reach the LLM. Block boundaries, locators, and crops are unchanged.
+    """
+    position: dict[str, tuple[str, int, int]] = {}
+    by_position: dict[tuple[str, int, int], dict[str, Any]] = {}
+    for block in blocks:
+        match = BLOCK_POSITION.search(block["id"])
+        if block.get("kind", "file") == "file" and match:
+            key = (block["file_id"], int(match.group(1)), int(match.group(2)))
+            position[block["id"]] = key
+            by_position[key] = block
+
+    chosen: dict[str, dict[str, Any]] = {}
+
+    def add(block: dict[str, Any] | None) -> None:
+        if block is not None and len(chosen) < cap:
+            chosen.setdefault(block["id"], block)
+
+    # 1. Retrieved blocks: never dropped by the cap.
+    for hit in hits:
+        add(hit)
+    # 2. Each retrieved file's page-1 header (first 3 blocks), round-robin across files so
+    #    every file's date and addressee lines get in before any one file's neighbours.
+    files = list(dict.fromkeys(position[h["id"]][0] for h in hits if h["id"] in position))
+    headers = {f: sorted(m for (fid, p, m) in by_position if fid == f and p == 1)[:3] for f in files}
+    for i in range(3):
+        for f in files:
+            if i < len(headers[f]):
+                add(by_position[(f, 1, headers[f][i])])
+    # 3. Neighbours on the same page (±1), in retrieval order, while there is room.
+    for hit in hits:
+        if hit["id"] in position:
+            file_id, page, m = position[hit["id"]]
+            add(by_position.get((file_id, page, m - 1)))
+            add(by_position.get((file_id, page, m + 1)))
+
+    file_order = list(dict.fromkeys(b["file_id"] for b in chosen.values()))
+    return sorted(
+        chosen.values(),
+        key=lambda b: (file_order.index(b["file_id"]), position.get(b["id"], ("", 0, 0))[1:]),
+    )
 
 
 def _not_found(reason: str, searched_files: int, started: float) -> dict[str, Any]:
@@ -151,7 +201,8 @@ def _generate(
     if not hits:
         return _not_found("No passages in these files match the question.", searched_files, started)
 
-    by_id = {f"b{i}": block for i, (block, _) in enumerate(hits, start=1)}
+    context = expand_context(search.get_index(ws).blocks, [block for block, _ in hits])
+    by_id = {f"b{i}": block for i, block in enumerate(context, start=1)}
     passages = "\n\n".join(
         f"[{bid}] ({_source_label(block)})\n{_snippet(block['text'], MAX_BLOCK_CHARS)}"
         for bid, block in by_id.items()

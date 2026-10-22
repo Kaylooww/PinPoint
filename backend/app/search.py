@@ -98,6 +98,9 @@ EXPANSION_SYSTEM = (
     "You help search a law/business firm's documents with keyword search. "
     "Given a question, return 5-10 short keywords and synonyms likely to appear in the "
     "documents that answer it (names, dates, legal and business terms, alternative wordings). "
+    "If the question asks when something happened or a date (when, what date, sent, signed, "
+    "issued, dated, due), also include date words: date, dated, issued, the month names, and "
+    "the year if one is implied. "
     'Respond as {"keywords": ["..."]}.'
 )
 

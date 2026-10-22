@@ -13,18 +13,19 @@ MinerU (verify every command with --help first):
 
 ## Ask pipeline
 1. Query expansion: the LLM returns 5–10 keywords and synonyms (JSON).
-2. Retrieval (hybrid): BM25 over the question plus the expansions (top 30), and cosine similarity between the question's embedding and every block's embedding (top 30), fused with reciprocal rank fusion (k=60); the top 6 go to the LLM. The query is embedded with the instruction prefix "Instruct: Given a question about a client's documents, retrieve passages that answer it\nQuery: " (documents get no prefix); on the test questions it put 12/12 answers in the top 6, versus 11/12 without the prefix and 10/12 for BM25 alone.
+2. Retrieval (hybrid): BM25 over the question plus the expansions (top 30), and cosine similarity between the question's embedding and every block's embedding (top 30), fused with reciprocal rank fusion (k=60); the top 6 are retrieved. The query is embedded with the instruction prefix "Instruct: Given a question about a client's documents, retrieve passages that answer it\nQuery: " (documents get no prefix); on the test questions it put 12/12 answers in the top 6, versus 11/12 without the prefix and 10/12 for BM25 alone.
    - Fallback (silent, mandatory): BM25 alone when LLM_PROVIDER=none (no outbound calls at all), when EMBED_BASE is unset, or when the embedding call fails or times out (EMBED_TIMEOUT_SECONDS, default 3). After a failure, embeddings are skipped for 60 s so later asks don't wait on a dead server.
    - Indexing: after a file's blocks are written (and after note changes), each block is embedded and its unit vector cached in data/{ws}/embeddings.json, keyed by a hash of model, dimensions, and text, so restarts and rescans only embed new or changed blocks. If embedding fails, the file still becomes ready; missing vectors are retried on startup (background) and on each ask (up to 32 per ask).
-3. Answer: the LLM receives the blocks as b1…b6 and returns JSON only:
+3. Context expansion: the 6 retrieved blocks, then the first 3 blocks of each retrieved file's page 1 (letterhead, date, addressee; round-robin across files), then each retrieved block's neighbours on the same page (±1), deduplicated, in document order within each file, at most 12 blocks. Short blocks such as a letter's date line rarely match the question's words, so this is how they reach the LLM. Block boundaries, locators, and crops are unchanged, and every context block is citable. Query expansion adds date words (date, dated, issued, month names, the year) for "when / what date / sent / signed / issued / due" questions.
+4. Answer: the LLM receives the context blocks as b1…bN (N ≤ 12) and returns JSON only:
    {"status":"answered"|"not_found","answer":[{"text":"...","sources":["b1"]}],"quotes":{"b1":"exact supporting words from b1"},"reason":"..."}
-4. Validation in code: drop sentences whose sources aren't in the provided ids. If nothing is left, return not_found. On invalid JSON, retry once with a stricter prompt, then return not_found.
-5. Create (or reuse cached) crops for the cited blocks only.
+5. Validation in code: drop sentences whose sources aren't in the provided ids. If nothing is left, return not_found. On invalid JSON, retry once with a stricter prompt, then return not_found.
+6. Create (or reuse cached) crops for the cited blocks only.
 
 ## LLM modes
 - generate (LLM_PROVIDER is openai_compatible — Claude Haiku via the organizers' Open WebUI server — or anthropic): the LLM does query expansion and writes the cited answer, as described above.
 - extractive (LLM_PROVIDER=none, or automatic when the LLM errors or times out): skip query expansion, run BM25 on the question only, and return the top 1–3 blocks as the answer sentences, each citing its own block, with the label "Showing matching passages." Crops, the citation panel, notes, history, and folders all work the same way.
-- Keep LLM calls small: at most 6 blocks of context and short JSON outputs. max_tokens is 1200 for the answer and 400 for query expansion, because the model's reasoning tokens count toward it (at 500, answers with quotes were cut off mid-JSON). A not_found caused by invalid JSON is never cached.
+- Keep LLM calls small: at most 12 context blocks (6 retrieved plus expansion) and short JSON outputs. max_tokens is 1200 for the answer and 400 for query expansion, because the model's reasoning tokens count toward it (at 500, answers with quotes were cut off mid-JSON). A not_found caused by invalid JSON is never cached.
 - backend/app/llm.py is the only module that talks to an LLM: chat_json(system, user, max_tokens=500) -> dict, and health() -> {ok, provider, model, latency_ms, mode}; embed(texts) -> list[list[float]] (POST {EMBED_BASE}/embeddings, 32 texts per call) and embed_health(). GET /api/health reports llm, embeddings ({ok, model, dimensions, latency_ms, error?}), and mineru status.
 
 ## API contract (frontend/src/lib/types.ts must match)

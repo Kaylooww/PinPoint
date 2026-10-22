@@ -128,6 +128,7 @@ The questions below are verified against the current sample files. Swap in the f
 - What was the total on the Northwind Stationers receipt? → PHP 1,236.50 (receipt photo, crop)
 - How much did we spend on travel in February 2026? → PHP 6,450.00, Panay Air (spreadsheet, text card)
 - When must the 2026 books be closed? → January 15, 2027 (memo, text card)
+- When was this letter sent? → March 2, 2026, citing the letter's date line
 - What is Bayview Bakery's bank account number? → **Not found**
 
 ## 4. Fallback plan
