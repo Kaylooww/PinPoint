@@ -45,7 +45,7 @@ with TestClient(main.app) as c:
     names = sorted(f["name"] for f in files)
     print("files:", [(f["name"], f["status"], f.get("error")) for f in files])
     check("only supported, visible, shallow, non-symlink files", names == EXPECTED)
-    check("folder file shape", all(f["source"] == "folder" and f["source_path"].startswith(F) for f in files))
+    check("folder file shape", all(f["source"] == "folder" and f["source_path"].startswith(os.path.realpath(F)) for f in files))
     fl = c.get(f"/api/workspaces/{WS}/folders").json()[0]
     check(f"folder ready with 3 files: {fl}", fl["status"] == "ready" and fl["file_count"] == len(EXPECTED) and fl["last_scanned_at"])
     os.remove(F + "/notes.txt"); open(F + "/new.txt", "w").write("New memo: the hearing was moved to June 2.\n")
