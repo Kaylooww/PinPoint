@@ -120,3 +120,54 @@ def expand_query(question: str, context: list[tuple[str, str]] | None = None) ->
     if not isinstance(keywords, list):
         return []
     return [str(k).strip() for k in keywords if str(k).strip()][:10]
+
+
+# Hybrid retrieval: BM25 + embedding cosine, fused with reciprocal rank fusion.
+
+RRF_K = 60
+CANDIDATES = 30
+# Qwen3-Embedding is trained with an instruction on queries (never on documents).
+QUERY_INSTRUCTION = "Instruct: Given a question about a client's documents, retrieve passages that answer it\nQuery: "
+
+
+def index_vectors(ws: str) -> None:
+    """Embed any blocks and notes without a cached vector. Never raises."""
+    from . import embeddings
+
+    if llm.embeddings_enabled():
+        embeddings.ensure(ws, get_index(ws).blocks)
+
+
+def hybrid(ws: str, question: str, expansions: list[str], k: int = 6) -> list[tuple[dict[str, Any], float]]:
+    """Top-k blocks by RRF over BM25 (question + expansions) and cosine similarity to the question.
+
+    Falls back to BM25 alone, silently, if embeddings are off or fail, or vectors are missing.
+    """
+    from . import embeddings
+
+    lexical = search(ws, " ".join([question, *expansions]), k=CANDIDATES)
+    if not llm.embeddings_enabled():
+        return lexical[:k]
+    index = get_index(ws)
+    try:
+        query = embeddings.normalize(llm.embed([QUERY_INSTRUCTION + question])[0])
+    except llm.LLMError:
+        return lexical[:k]
+    vectors = embeddings.ensure(ws, index.blocks, max_new=32)  # retry a few missing ones per ask
+    scored = []
+    for block in index.blocks:
+        vector = vectors.get(embeddings.text_hash(block["text"]))
+        if vector is not None:
+            scored.append((block, sum(a * b for a, b in zip(query, vector))))
+    if not scored:
+        return lexical[:k]
+    dense = sorted(scored, key=lambda pair: pair[1], reverse=True)[:CANDIDATES]
+
+    fused: dict[str, float] = {}
+    by_id: dict[str, dict[str, Any]] = {}
+    for ranking in (lexical, dense):
+        for rank, (block, _) in enumerate(ranking, start=1):
+            fused[block["id"]] = fused.get(block["id"], 0.0) + 1.0 / (RRF_K + rank)
+            by_id[block["id"]] = block
+    top = sorted(fused.items(), key=lambda pair: pair[1], reverse=True)[:k]
+    return [(by_id[block_id], score) for block_id, score in top]

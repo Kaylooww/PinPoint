@@ -9,7 +9,7 @@ Before any task, read this file, then docs/PRODUCT.md, docs/ARCHITECTURE.md, and
 ## Stack
 - frontend/: React + Vite + TypeScript (strict) + Tailwind CSS + react-router-dom + lucide-react. Fonts self-hosted via @fontsource (Inter, Instrument Serif).
 - backend/: Python 3.12 + FastAPI. MinerU 4.x runs locally for parsing. rank_bm25 for search. Pillow for crops.
-- LLM: switchable via LLM_PROVIDER in backend/.env. Primary: openai_compatible (Claude Haiku via the organizers' Open WebUI server, OpenAI-compatible chat completions). Fallbacks: anthropic (Claude Haiku via the Anthropic API directly) and none (extractive mode, no LLM). Only backend/app/llm.py talks to an LLM.
+- LLM: switchable via LLM_PROVIDER in backend/.env. Primary: openai_compatible (Claude Haiku via the organizers' Open WebUI server, OpenAI-compatible chat completions). Fallbacks: anthropic (Claude Haiku via the Anthropic API directly) and none (extractive mode, no LLM). Only backend/app/llm.py talks to a model (chat and embeddings).
 
 ## Figma (design source of truth)
 - File key: dEpoBVGwqEwzOmYaKJC750. Frame node ids are listed in docs/DESIGN.md.
@@ -23,7 +23,7 @@ Before any task, read this file, then docs/PRODUCT.md, docs/ARCHITECTURE.md, and
 3. Frontend: cd frontend && npm run dev (http://localhost:5173)
 
 ## Hard rules
-1. At runtime, the only network calls allowed are to the configured LLM provider and local services on this machine (the MinerU server). No CDNs, Google Fonts, analytics, or other external APIs. With LLM_PROVIDER=none, the app makes no outbound calls at all. Breaking this can disqualify the team.
+1. At runtime, the only network calls allowed are to the configured LLM provider, the organizers' embedding server (EMBED_BASE), and local services on this machine (the MinerU server). No CDNs, Google Fonts, analytics, or other external APIs. With LLM_PROVIDER=none, the app makes no outbound calls at all, including to the embedding server. Breaking this can disqualify the team.
 2. Never print or commit API keys. Keys live in backend/.env.
 3. Never guess MinerU's output format. Run it on a real sample file and inspect the JSON before writing any parser.
 4. Answers come only from retrieved document blocks. Every answer sentence must cite at least one source block. Anything unsupported becomes "not_found". Enforce this in code, not only in the prompt.

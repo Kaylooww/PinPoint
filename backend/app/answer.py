@@ -147,7 +147,7 @@ def _generate(
         expansions = search.expand_query(question, context)
     except llm.LLMBadJSON:
         expansions = []
-    hits = search.search(ws, " ".join([question, *expansions]), k=TOP_K)
+    hits = search.hybrid(ws, question, expansions, k=TOP_K)
     if not hits:
         return _not_found("No passages in these files match the question.", searched_files, started)
 

@@ -87,7 +87,7 @@ cd backend && .venv/bin/python scripts/reset_demo.py
 - [ ] Laptop on power, notifications off, browser zoom 100%, window at least 1440 px wide.
 - [ ] Venue Wi-Fi works: `curl -s http://localhost:8000/api/health` shows `"llm": {"ok": true, "mode": "generate"}`. If it says `extractive`, see the fallback plan.
 - [ ] MinerU healthy: `mineru server status --json` → `parse_server.local.healthy: true`.
-- [ ] `/api/health` shows `"mineru": {"ok": true}`.
+- [ ] `/api/health` shows `"mineru": {"ok": true}` and `"embeddings": {"ok": true, "dimensions": 512}`. The embedding server is on the venue network; if it shows `ok: false`, search quietly uses keywords only (answers still work, wording-different questions may miss).
 - [ ] `reset_demo.py` ran and printed `Done: N/N files ready`.
 - [ ] Answer cache warmed, as the **last** step after the final backend start (a backend restart clears the cache): `cd backend && .venv/bin/python scripts/warm_cache.py`. It asks every question in `docs/DEMO_QUESTIONS.md` and prints each status. Warm answers come back instantly, and their crops are already on disk.
 - [ ] The file to upload live is on the Desktop (a photo or PDF not already in the workspace).
@@ -106,7 +106,7 @@ The questions below are verified against the current sample files. Swap in the f
    *"How much is the penalty if the rented car is taken outside Cebu?"*
    → Answer with numbered citations [1] [2], from the scanned contract.
 5. **Show the proof.** Click citation **[1]**. The panel shows the highlighted crop of the exact paragraph, the file and page, and the extracted text. Press **Esc**.
-6. **Follow-up.** Click **Ask a follow-up** and type *"Who is the renter named in that agreement?"* → it answers in the same thread. (Avoid bare one-word follow-ups like "Who is the renter?": "renter" is in almost every clause, so retrieval can miss the paragraph and the answer is Not found.)
+6. **Follow-up.** Click **Ask a follow-up** and type *"Who is the renter?"* → it answers in the same thread. Hybrid search finds the paragraph that names the renter even though "renter" is in almost every clause. (If `/api/health` shows embeddings not ok, use *"Who is the renter named in that agreement?"* instead.)
 7. **Save.** Click **Save** on the first answer. Open **Memory → Saved answers** to show it is kept, plus the full **History**.
 8. **A question that needs the photo.** Back on **Ask**, click **New question**:
    *"What is the invoice number on the receipt?"* → `00544947`, cited from the phone photo.
@@ -118,7 +118,7 @@ The questions below are verified against the current sample files. Swap in the f
 
 **Reyes & Partners** (scanned contract + phone photo of a receipt):
 - How much is the penalty if the rented car is taken outside Cebu? → two clauses, PHP 10,000 and at least PHP 5,000, with crops
-- Follow-up: Who is the renter named in that agreement? → Dr. Crarina Caldenm (scan text)
+- Follow-up: Who is the renter? → Dr. Crarina Caldenm (scan text); needs embeddings ok, else ask "Who is the renter named in that agreement?"
 - What is the invoice number on the receipt? → 00544947, from the photo
 - When is the filing deadline for the Santos case? → **Not found**
 
@@ -134,6 +134,7 @@ The questions below are verified against the current sample files. Swap in the f
 
 | Problem | What to do |
 |---|---|
+| Embedding server unreachable (`/api/health` embeddings not ok) | Nothing to do: search falls back to keywords (BM25) silently. Prefer questions that use the document's own words. |
 | Venue Wi-Fi down, or the LLM server errors or is slow | Nothing to do live: answers automatically switch to **extractive mode** ("Showing matching passages") with the same citations and crops. To force it for the rest of the demo, set `LLM_PROVIDER=none` in `backend/.env` and restart the backend; this makes no outbound calls at all. |
 | A live upload fails or takes too long | Skip it. The pre-loaded files already cover every question. |
 | MinerU stops | Already-parsed files and warmed answers keep working (the index and crops are on disk). Only new uploads need MinerU: run `mineru server restart`. |
