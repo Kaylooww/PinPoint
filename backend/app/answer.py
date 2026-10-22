@@ -32,7 +32,8 @@ Rules:
 - If the passages do not contain the answer, set "status" to "not_found", leave "answer" empty, and give a one-sentence "reason".
 - Be brief: 1-3 sentences.
 - In "quotes", for each passage you cite, copy the shortest span of that passage that supports the answer, exactly as written (same words, spelling, and typos; do not fix, reword, or shorten inside the span).
-Respond as {"status": "answered" | "not_found", "answer": [{"text": "...", "sources": ["b1"]}], "quotes": {"b1": "exact words from b1"}, "reason": "..."}"""
+- If the status is "not_found" but a passage covers something close to what was asked (for example the same kind of document with a different date, number, or name), add "suggestion": {"text": "Did you mean ...?", "question": "the question asked again about what the passage actually contains", "sources": ["b2"]}. "text" is one short question that names the close match and does not contain the answer. Use only dates, numbers, and names exactly as they appear in those passages. Never answer the original question from a mismatched passage; the status stays "not_found".
+Respond as {"status": "answered" | "not_found", "answer": [{"text": "...", "sources": ["b1"]}], "quotes": {"b1": "exact words from b1"}, "reason": "...", "suggestion": {"text": "...", "question": "...", "sources": ["b2"]}}"""
 
 _cache: dict[tuple[str, str, tuple[str, ...]], dict[str, Any]] = {}
 _cache_guard = threading.Lock()
@@ -125,11 +126,117 @@ def expand_context(
     )
 
 
-def _not_found(reason: str, searched_files: int, started: float) -> dict[str, Any]:
-    return _response("not_found", [], [], searched_files, started, reason)
+def _not_found(
+    reason: str,
+    searched_files: int,
+    started: float,
+    near_matches: list[dict[str, Any]] | None = None,
+    suggestion: dict[str, str] | None = None,
+) -> dict[str, Any]:
+    response = _response("not_found", [], [], searched_files, started, reason)
+    response["near_matches"] = near_matches or []
+    if suggestion:
+        response["suggestion"] = suggestion
+    return response
+
+
+MONTHS = (
+    "january february march april may june july august september october november december "
+    "jan feb mar apr jun jul aug sep sept oct nov dec"
+).split()
+FACT_TOKEN = re.compile(r"\d[\d,./:-]*\d|\d|[A-Za-z]+")
+
+
+def suggestion_facts(text: str) -> list[str]:
+    """Dates, numbers, amounts, and month names in a suggestion; each must be in the blocks."""
+    facts = []
+    for token in FACT_TOKEN.findall(text):
+        low = token.lower()
+        if any(ch.isdigit() for ch in token) or low in MONTHS:
+            facts.append(low.rstrip(".,"))
+    return facts
+
+
+def validate_suggestion(raw: Any, blocks: list[dict[str, Any]]) -> dict[str, str] | None:
+    """{text, question} if every date, number, amount, and month in it appears verbatim in
+    one of `blocks` (case and whitespace ignored); otherwise None."""
+    if not isinstance(raw, dict):
+        return None
+    text, question = str(raw.get("text", "")).strip(), str(raw.get("question", "")).strip()
+    if not text or not question or len(text) > 300 or len(question) > 300 or not blocks:
+        return None
+    # One short question that doesn't carry the answer: "Did you mean X? Its total is Y." is out.
+    if not text.endswith("?") or re.search(r"[.!?]\s+\S", text):
+        return None
+    haystack = " ".join(" ".join(b["text"].split()).lower() for b in blocks)
+    compact = haystack.replace(" ", "")
+    for fact in suggestion_facts(f"{text} {question}"):
+        if fact not in haystack and fact.replace(" ", "") not in compact:
+            return None
+    return {"text": text, "question": question}
 
 
 MAX_CITATION_CHARS = 4000
+
+
+def _citation(ws: str, block: dict[str, Any], n: int, query: str, quote: str | None = None) -> dict[str, Any]:
+    full = block["text"] if len(block["text"]) <= MAX_CITATION_CHARS else block["text"][:MAX_CITATION_CHARS] + "…"
+    citation = {
+        "id": f"c{n}",
+        "number": n,
+        "kind": block.get("kind", "file"),
+        "file_id": block["file_id"],
+        "file_name": block["file_name"],
+        "page": block["page"],
+        "locator": block["locator"],
+        "text": full,
+        "excerpt": excerpts.excerpt(block["text"], query, quote),
+        "crop_url": crops.crop_url(ws, block) if block.get("kind", "file") == "file" else None,
+    }
+    if block.get("table"):
+        citation["table"] = block["table"]
+    return citation
+
+
+NEAR_MATCHES = 3
+
+
+def _near_matches(
+    ws: str, question: str, retrieved: list[dict[str, Any]], context: list[dict[str, Any]], raw: Any, by_id: dict[str, Any]
+) -> tuple[list[dict[str, Any]], dict[str, str] | None]:
+    """Up to 3 close passages for a not_found answer, plus the LLM's suggestion if it checks out.
+
+    The suggestion's own sources (and context blocks holding its facts) come first, then the
+    retrieved blocks in rank order. The suggestion is validated against the near matches.
+    """
+    def flat(block: dict[str, Any]) -> str:
+        return " ".join(block["text"].split()).lower()
+
+    files_only = [b for b in context if b.get("kind", "file") == "file"]
+    chosen: dict[str, dict[str, Any]] = {}
+    if isinstance(raw, dict):
+        # 1. Cover the suggestion's facts (dates, numbers, months) with as few blocks as possible.
+        facts = set(suggestion_facts(f"{raw.get('text', '')} {raw.get('question', '')}"))
+        while len(chosen) < NEAR_MATCHES:
+            covered = " ".join(flat(b) for b in chosen.values())
+            missing = {f for f in facts if f not in covered}
+            best = max((b for b in files_only if b["id"] not in chosen), key=lambda b: sum(f in flat(b) for f in missing), default=None)
+            if not missing or best is None or not any(f in flat(best) for f in missing):
+                break
+            chosen[best["id"]] = best
+        # 2. Then the passages the LLM named.
+        sources = raw.get("sources") if isinstance(raw.get("sources"), list) else []
+        for b in (by_id[s] for s in (str(x).strip() for x in sources) if s in by_id):
+            if len(chosen) < NEAR_MATCHES and b.get("kind", "file") == "file":
+                chosen.setdefault(b["id"], b)
+    # 3. Then the retrieved blocks in rank order.
+    for b in retrieved:
+        if len(chosen) < NEAR_MATCHES and b.get("kind", "file") == "file":
+            chosen.setdefault(b["id"], b)
+    blocks = list(chosen.values())
+    suggestion = validate_suggestion(raw, blocks)
+    query = " ".join([question, suggestion["question"] if suggestion else ""])
+    return [_citation(ws, b, n, query) for n, b in enumerate(blocks, start=1)], suggestion
 
 
 def _cite(
@@ -155,23 +262,8 @@ def _cite(
             if block["id"] not in numbers:
                 n = len(numbers) + 1
                 numbers[block["id"]] = n
-                full = block["text"] if len(block["text"]) <= MAX_CITATION_CHARS else block["text"][:MAX_CITATION_CHARS] + "…"
                 query = " ".join([question, *support[block["id"]]])
-                citation = {
-                    "id": f"c{n}",
-                    "number": n,
-                    "kind": block.get("kind", "file"),
-                    "file_id": block["file_id"],
-                    "file_name": block["file_name"],
-                    "page": block["page"],
-                    "locator": block["locator"],
-                    "text": full,
-                    "excerpt": excerpts.excerpt(block["text"], query, (quotes or {}).get(block["id"])),
-                    "crop_url": crops.crop_url(ws, block) if block.get("kind", "file") == "file" else None,
-                }
-                if block.get("table"):
-                    citation["table"] = block["table"]
-                citations.append(citation)
+                citations.append(_citation(ws, block, n, query, (quotes or {}).get(block["id"])))
             cid = f"c{numbers[block['id']]}"
             if cid not in ids:
                 ids.append(cid)
@@ -226,7 +318,8 @@ def _generate(
 
     if not sentences:
         reason = str(reply.get("reason") or "").strip() or "These files don't contain the answer."
-        return _not_found(reason, searched_files, started)
+        near, suggestion = _near_matches(ws, question, [b for b, _ in hits], context, reply.get("suggestion"), by_id)
+        return _not_found(reason, searched_files, started, near, suggestion)
     raw_quotes = reply.get("quotes") if isinstance(reply.get("quotes"), dict) else {}
     quotes = {by_id[k]["id"]: v for k, v in raw_quotes.items() if k in by_id and isinstance(v, str)}
     answer, citations = _cite(ws, sentences, question, quotes)

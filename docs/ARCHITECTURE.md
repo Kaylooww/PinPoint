@@ -21,6 +21,7 @@ MinerU (verify every command with --help first):
    {"status":"answered"|"not_found","answer":[{"text":"...","sources":["b1"]}],"quotes":{"b1":"exact supporting words from b1"},"reason":"..."}
 5. Validation in code: drop sentences whose sources aren't in the provided ids. If nothing is left, return not_found. On invalid JSON, retry once with a stricter prompt, then return not_found.
 6. Create (or reuse cached) crops for the cited blocks only.
+7. Not found → "Did you mean…?": not_found responses carry near_matches (up to 3 Citations with crops, the blocks covering the suggestion's facts first, then the LLM's named passages, then retrieval order) and optionally suggestion {text, question}, which the LLM proposes in the same JSON call. Validated in code: text is one question ending in "?" (it must not carry the answer), and every date, number, amount, and month name in text and question appears verbatim in a near-match block (case and whitespace ignored); otherwise it is dropped and only near_matches remain. The status stays not_found; the mismatched question is never answered.
 
 ## LLM modes
 - generate (LLM_PROVIDER is openai_compatible — Claude Haiku via the organizers' Open WebUI server — or anthropic): the LLM does query expansion and writes the cited answer, as described above.
@@ -39,7 +40,7 @@ GET  /api/crops/{crop_id}.png → image
 
 Workspace: {id, name, industry, file_count, updated_at}
 FileItem: {id, name, type: "pdf"|"image"|"doc"|"sheet"|"slides"|"other", pages, size_bytes, status: "queued"|"parsing"|"ready"|"failed", progress_label?, error?}
-AskResponse: {status: "answered"|"not_found", answer: {text, sources: string[]}[], citations: Citation[], reason?, searched_files, elapsed_ms}
+AskResponse: {status: "answered"|"not_found", answer: {text, sources: string[]}[], citations: Citation[], reason?, searched_files, elapsed_ms, near_matches?: Citation[], suggestion?: {text, question}}
 Citation: {id, number, file_id, file_name, page, locator, text, excerpt, crop_url, table?}
 
 ## Persistence

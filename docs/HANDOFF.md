@@ -1,6 +1,6 @@
 # PinPoint — Handoff
 
-Last updated: Thursday 14:48, item 1/4 (letter date fix). Branch: demo-polish (on top of hybrid-retrieval → PR #6 → PR #5; none merged yet).
+Last updated: Thursday 14:58, item 2/4 (Did you mean…?). Branch: demo-polish (PR #7, stacked on #6 and #5).
 
 ## Done (and tested)
 - Phase A 1–6: backend core on MinerU **basic** tier; both samples parse to ready; crops; API end-to-end.
@@ -13,7 +13,7 @@ Last updated: Thursday 14:48, item 1/4 (letter date fix). Branch: demo-polish (o
 - Phase D 17: knowledge stats strip at the top of the Files tab (GET /knowledge), refreshed when files change. Browser-checked against the API.
 
 ## In progress
-- Latest request, 4 items: (1) letter-date bug — DONE: context expansion (6 retrieved → + page-1 header round-robin → + ±1 neighbours, cap 12) and date words in query expansion; "When was this letter sent?" → March 2, 2026 citing the date block; all 11 demo questions OK. Answer max_tokens stays 1200 (500 truncated JSON). (2) "Did you mean…?" on not_found; (3) document viewer as a centered modal with page images, zoom, and Ask-about-this-document; (4) sidebar Files → Select client screen.
+- Latest request, 4 items: (1) letter-date bug — DONE: context expansion (6 retrieved → + page-1 header round-robin → + ±1 neighbours, cap 12) and date words in query expansion; "When was this letter sent?" → March 2, 2026 citing the date block; all 11 demo questions OK. Answer max_tokens stays 1200 (500 truncated JSON). (2) "Did you mean…?" on not_found — DONE (near_matches + validated suggestion; one-question rule; button asks in the same thread; near-match cards open the viewer); (3) document viewer as a centered modal with page images, zoom, and Ask-about-this-document; (4) sidebar Files → Select client screen.
 - Hybrid retrieval DONE: llm.embed() → organizers' embedding server (EMBED_* in backend/.env), vectors cached in data/{ws}/embeddings.json by text hash, RRF(k=60) of BM25 + cosine, query instruction prefix kept (12/12 answers in top 6 vs 11/12 without, 10/12 BM25 alone). Silent BM25 fallback when embeddings are off/failing (60 s circuit breaker), zero outbound calls with LLM_PROVIDER=none. "Who is the renter?" now answers. /api/health has an embeddings entry.
 - Final demo run (both workspaces, light + dark, real backend): every step passes — upload → ready, cited answer saved by default, crops, panel excerpt, Open document (PDF at the cited page), follow-up, not-found, Memory; Villanueva files, receipt photo viewer, CSV as a table, memo, three questions incl. not-found. No real bugs found in this run (two failures were test-script step-order issues).
 - Four late features, one slice at a time: (1) auto-save answered questions — DONE; (2) readable excerpt + full text in the citation panel — DONE (Citation.excerpt always literally from the block; Citation.table for tables; collapsible full text; LLM max_tokens raised because reasoning tokens truncated the JSON); (3) document viewer + raw/text endpoints — DONE (overlay from file rows and the citation panel's Open document; PDF in the browser's viewer at #page=N, image fit/actual size, txt/md/csv text, office files as parsed pages; the parsed-pages view is untested in the browser for lack of an office file); (4) second demo client "Villanueva Accounting" with fictional generated documents — DONE (scripts/make_demo_files.py; reset_demo.py rebuilds both; 6 questions verified and listed in DEMO.md). The document viewer is an overlay panel, not a route, so App.tsx routes stay untouched for the Landing/Sign in patch.
@@ -35,7 +35,7 @@ cd frontend && npm run dev   # http://localhost:5173
 Reset both demo workspaces (servers running): `cd backend && .venv/bin/python scripts/reset_demo.py`
 Warm the answer cache (after the final backend start): `cd backend && .venv/bin/python scripts/warm_cache.py`
 
-Tests (throwaway data dir): `cd backend && .venv/bin/python tests/test_core_fixture.py`, `tests/test_folders.py`, and `tests/test_excerpts.py` (no network), and `tests/test_documents.py` (raw/text endpoints refuse unknown and path-like ids), and `tests/test_hybrid.py` (embedding fallbacks offline, zero outbound with LLM_PROVIDER=none, plus a live "Who is the renter?" check; `--offline` skips the live part). Add `LLM_PROVIDER=none` to test extractive mode.
+Tests (throwaway data dir): `cd backend && .venv/bin/python tests/test_core_fixture.py`, `tests/test_folders.py`, and `tests/test_excerpts.py` (no network), and `tests/test_documents.py` (raw/text endpoints refuse unknown and path-like ids), and `tests/test_context.py` and `tests/test_suggestions.py` (`--offline` skips their live parts), `tests/test_hybrid.py` (embedding fallbacks offline, zero outbound with LLM_PROVIDER=none, plus a live "Who is the renter?" check; `--offline` skips the live part). Add `LLM_PROVIDER=none` to test extractive mode.
 
 ## Known issues
 - The embedding server (EMBED_BASE) is only reachable on the venue network. Elsewhere, /api/health shows embeddings not ok and search uses BM25 alone (answers still work).

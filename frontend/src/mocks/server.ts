@@ -156,6 +156,7 @@ async function answer(ws: string, question: string): Promise<AskResponse> {
     answer: [],
     citations: [],
     reason: `None of the ${ready} files in this workspace mention this.`,
+    near_matches: [],
     searched_files: ready,
     elapsed_ms,
   }

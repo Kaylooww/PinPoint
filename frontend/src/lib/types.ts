@@ -52,6 +52,13 @@ export type AnswerSentence = {
 
 export type AskStatus = 'answered' | 'not_found'
 
+export type Suggestion = {
+  /** e.g. "Did you mean the invoice dated April 15, 2026?" */
+  text: string
+  /** The question to ask instead. */
+  question: string
+}
+
 export type AskResponse = {
   status: AskStatus
   answer: AnswerSentence[]
@@ -59,6 +66,10 @@ export type AskResponse = {
   reason?: string
   searched_files: number
   elapsed_ms: number
+  /** not_found only: up to 3 close passages (with crops). */
+  near_matches?: Citation[]
+  /** not_found only: a validated "Did you mean…?" (its dates and numbers are in near_matches). */
+  suggestion?: Suggestion
 }
 
 export type AskRequest = {
