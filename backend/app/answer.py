@@ -212,15 +212,27 @@ def _near_matches(
     def flat(block: dict[str, Any]) -> str:
         return " ".join(block["text"].split()).lower()
 
-    files_only = [b for b in context if b.get("kind", "file") == "file"]
+    # Candidates: every block of the files retrieval found (a title line with an invoice
+    # number can fall outside the 12-block context). Facts are still checked verbatim.
+    hit_files = {b["file_id"] for b in retrieved}
+    files_only = [b for b in search.get_index(ws).blocks if b.get("kind", "file") == "file" and b["file_id"] in hit_files] or [
+        b for b in context if b.get("kind", "file") == "file"
+    ]
     chosen: dict[str, dict[str, Any]] = {}
     if isinstance(raw, dict):
         # 1. Cover the suggestion's facts (dates, numbers, months) with as few blocks as possible.
         facts = set(suggestion_facts(f"{raw.get('text', '')} {raw.get('question', '')}"))
+        named = {by_id[str(x).strip()]["id"] for x in (raw.get("sources") or []) if str(x).strip() in by_id}
+        rank = {b["id"]: i for i, b in enumerate(retrieved)}
         while len(chosen) < NEAR_MATCHES:
             covered = " ".join(flat(b) for b in chosen.values())
             missing = {f for f in facts if f not in covered}
-            best = max((b for b in files_only if b["id"] not in chosen), key=lambda b: sum(f in flat(b) for f in missing), default=None)
+            # Most uncovered facts first; ties go to passages the LLM named, then retrieval rank.
+            best = max(
+                (b for b in files_only if b["id"] not in chosen),
+                key=lambda b: (sum(f in flat(b) for f in missing), b["id"] in named, -rank.get(b["id"], len(rank))),
+                default=None,
+            )
             if not missing or best is None or not any(f in flat(best) for f in missing):
                 break
             chosen[best["id"]] = best
