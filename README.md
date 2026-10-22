@@ -35,19 +35,46 @@ pip install -r requirements.txt
 cp .env.example .env    # then fill in the LLM settings below (never commit .env)
 ```
 
+### Local models (Ollama)
+
+PinPoint runs on free local models through [Ollama](https://ollama.com) (0.20 or newer). Nothing leaves the laptop.
+
+```sh
+brew install ollama             # or the macOS app from ollama.com; then start it (ollama serve, or open the app)
+ollama pull gemma4:e2b          # chat model, ~7.5 GB
+ollama pull embeddinggemma      # embedding model, ~620 MB (nomic-embed-text also works)
+```
+
+In `backend/.env`:
+
+```sh
+LLM_PROVIDER=openai_compatible
+OPENAI_COMPAT_BASE=http://localhost:11434/v1
+OPENAI_COMPAT_KEY=ollama
+OPENAI_COMPAT_MODEL=gemma4:e2b
+EMBED_BASE=http://localhost:11434/v1
+EMBED_KEY=ollama
+EMBED_MODEL=embeddinggemma
+EMBED_DIMENSIONS=768
+LLM_TIMEOUT_SECONDS=120
+EMBED_TIMEOUT_SECONDS=15
+```
+
+Switching embedding models needs no re-upload: on the next start, each workspace is re-embedded in the background from its saved blocks (a few minutes for ~17k passages); search uses keywords alone until it finishes.
+
 ### LLM provider
 
 Set `LLM_PROVIDER` in `backend/.env`. Only `backend/app/llm.py` talks to an LLM.
 
 | `LLM_PROVIDER` | What it uses | Settings |
 |---|---|---|
-| `openai_compatible` (primary) | Claude Haiku via the organizers' Open WebUI server (model `claude-haiku-5-5`) | `OPENAI_COMPAT_BASE` (for Open WebUI usually `https://<host>/api`), `OPENAI_COMPAT_KEY`, `OPENAI_COMPAT_MODEL` |
-| `anthropic` (fallback) | Claude Haiku via the Anthropic API | `ANTHROPIC_API_KEY`, `ANTHROPIC_MODEL` (default `claude-haiku-5-5`) |
+| `openai_compatible` (primary) | Local Ollama (`gemma4:e2b`), or any OpenAI-compatible server | `OPENAI_COMPAT_BASE` (Ollama: `http://localhost:11434/v1`), `OPENAI_COMPAT_KEY`, `OPENAI_COMPAT_MODEL` |
+| `anthropic` (optional, cloud) | Claude Haiku via the Anthropic API | `ANTHROPIC_API_KEY`, `ANTHROPIC_MODEL` (default `claude-haiku-5-5`) |
 | `none` (fallback) | No LLM: extractive mode shows the best-matching passages | none; the app makes no outbound calls |
 
-If the LLM errors or times out (`LLM_TIMEOUT_SECONDS`, default 45), answers fall back to extractive mode automatically.
+If the LLM errors or times out (`LLM_TIMEOUT_SECONDS`, default 45; use 120 locally), answers fall back to extractive mode automatically. With a local server, thinking is off for speed; set `LLM_REASONING_EFFORT=low` to turn it on (more accurate on some questions, 4–10× slower).
 
-**Getting an Anthropic API key (fallback only):** sign in at [platform.claude.com](https://platform.claude.com), add billing under Settings → Billing, then create a key under Settings → API keys and paste it into `ANTHROPIC_API_KEY` in `backend/.env`. A Claude Pro or Max subscription does not include API access.
+**Getting an Anthropic API key (optional cloud provider only):** sign in at [platform.claude.com](https://platform.claude.com), add billing under Settings → Billing, then create a key under Settings → API keys and paste it into `ANTHROPIC_API_KEY` in `backend/.env`. A Claude Pro or Max subscription does not include API access.
 
 ## 3. Frontend
 
@@ -65,7 +92,7 @@ cd backend && source .venv/bin/activate && uvicorn app.main:app --reload --port 
 cd frontend && npm run dev    # http://localhost:5173
 ```
 
-`GET http://localhost:8000/api/health` reports the LLM provider and MinerU server status. Restart the backend after editing `backend/.env`.
+`GET http://localhost:8000/api/health` reports the LLM, the embedding model, and MinerU server status. Restart the backend after editing `backend/.env`.
 
 ## Business plan
 

@@ -389,17 +389,30 @@ def _generate(
         return _not_found("No passages in these files match the question.", searched_files, started)
 
     pool = [b for b in search.get_index(ws).blocks if file_ids is None or b["file_id"] in file_ids]
-    context = expand_context(pool, [block for block, _ in hits])
+    # A local model gets 8 blocks in all (6 retrieved + 2 headings or neighbours) so it stays fast.
+    limit = llm.max_context_blocks()
+    max_headings = min(MAX_HEADING_BLOCKS, limit - TOP_K)
+    context = expand_context(pool, [block for block, _ in hits], cap=limit)
     # The headings above the retrieved passages (e.g. the "Article VI" block), so a claim
-    # about the location can cite the heading itself: at most 4 extra blocks.
+    # about the location can cite the heading itself: at most 4 extra blocks (2 when local).
     by_block_id = {b["id"]: b for b in pool}
     in_context = {b["id"] for b in context}
     extra = []
     for block, _ in hits:
         for hid in block.get("heading_ids") or []:
-            if hid not in in_context and hid in by_block_id and len(extra) < MAX_HEADING_BLOCKS:
+            if hid not in in_context and hid in by_block_id and len(extra) < max_headings:
                 extra.append(by_block_id[hid])
                 in_context.add(hid)
+    if limit < MAX_CONTEXT_BLOCKS and extra:
+        # Make room for the headings, never dropping a retrieved block.
+        retrieved = {block["id"] for block, _ in hits}
+        drop = len(context) + len(extra) - limit
+        for block in reversed(list(context)):
+            if drop <= 0:
+                break
+            if block["id"] not in retrieved:
+                context.remove(block)
+                drop -= 1
     context = extra + context
     by_id = {f"b{i}": block for i, block in enumerate(context, start=1)}
     passages = "\n\n".join(

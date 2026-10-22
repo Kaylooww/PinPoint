@@ -1,7 +1,7 @@
 """The only module that talks to an LLM.
 
 Provider is chosen by LLM_PROVIDER in backend/.env:
-  openai_compatible  the organizers' server (POST {OPENAI_COMPAT_BASE}/chat/completions)
+  openai_compatible  local Ollama, or any OpenAI-compatible server (POST {OPENAI_COMPAT_BASE}/chat/completions)
   anthropic          Claude via the official Anthropic SDK (fallback)
   none               no LLM; callers fall back to extractive mode
 
@@ -91,46 +91,102 @@ def missing_settings(cfg: Config) -> list[str]:
     return []
 
 
+def is_local(base: str) -> bool:
+    """True when the server runs on this machine (Ollama), not a remote OpenAI-compatible host."""
+    host = httpx.URL(base).host if base else ""
+    return host in ("localhost", "127.0.0.1", "::1")
+
+
+def max_context_blocks() -> int:
+    """Blocks sent to the LLM per answer: 8 for a local model so generation stays fast, else 12."""
+    cfg = config()
+    return 8 if cfg.provider == "openai_compatible" and is_local(cfg.openai_base) else 12
+
+
+# Reasoning that some local models write into the reply itself, before the JSON.
+THINKING = re.compile(
+    r"<(think|thinking|reasoning)>.*?</\1>|<\|channel\|?>thought.*?<\|?channel\|>|<\|?think\|?>.*?<\|?/?think\|?>",
+    re.DOTALL | re.IGNORECASE,
+)
+
+
 def parse_json_object(text: str) -> dict[str, Any]:
-    """Parse a JSON object from model text, tolerating code fences and stray prose."""
-    cleaned = text.strip()
+    """Parse a JSON object from model text, tolerating thinking, code fences, and stray prose."""
+    cleaned = THINKING.sub("", text).strip()
     fence = re.match(r"^```(?:json)?\s*(.*?)\s*```$", cleaned, re.DOTALL)
     if fence:
         cleaned = fence.group(1)
     try:
         value = json.loads(cleaned)
     except json.JSONDecodeError:
-        start, end = cleaned.find("{"), cleaned.rfind("}")
-        if start == -1 or end <= start:
+        cleaned = _escape_stray_quotes(cleaned)
+        start = cleaned.find("{")
+        if start == -1:
             raise
-        value = json.loads(cleaned[start : end + 1])
+        # The first complete object; prose after it is ignored.
+        value, end = json.JSONDecoder().raw_decode(cleaned, start)
+        rest = cleaned[end:].strip()
+        if rest.startswith(","):
+            # Small local models close the object early and add keys after it:
+            # {"status": ..., "reason": "..."},\n"suggestion": {...}  → move the brace to the end.
+            try:
+                value = json.loads(cleaned[start : end - 1] + rest + "}")
+            except json.JSONDecodeError:
+                pass
     if not isinstance(value, dict):
         raise json.JSONDecodeError("Expected a JSON object", cleaned, 0)
     return value
 
 
+def _escape_stray_quotes(text: str) -> str:
+    """Escape quotes a model copied into a string unescaped (… INPUT TAX." is stamped …).
+
+    Without JSON mode, small models do this when quoting documents, whose quotes are often
+    mismatched (“Invoice", “Cash Invoice"). The parse error ("Expecting ',' delimiter",
+    "Expecting property name", ...) sits just after such a quote, so escape the last quote
+    before it and try again (at most 20 times). A cut-off reply is left alone.
+    """
+    for _ in range(20):
+        try:
+            json.loads(text)
+            return text
+        except json.JSONDecodeError as e:
+            if not e.msg.startswith("Expecting") or e.pos >= len(text.rstrip()) - 1:
+                return text
+            quote = text.rfind('"', 0, e.pos)
+            if quote <= 0 or text[quote - 1] == "\\":
+                return text
+            text = f'{text[:quote]}\\"{text[quote + 1:]}'
+    return text
+
+
+_json_mode_unsupported: set[str] = set()  # local models that refused response_format
+
+
 def _call_openai_compatible(cfg: Config, system: str, user: str, max_tokens: int) -> str:
-    try:
-        res = httpx.post(
-            f"{cfg.openai_base}/chat/completions",
-            headers={"Authorization": f"Bearer {cfg.openai_key}"},
-            json={
-                "model": cfg.model,
-                "messages": [
-                    {"role": "system", "content": system},
-                    {"role": "user", "content": user},
-                ],
-                # The organizers' server (Claude Haiku behind Open WebUI) rejects `temperature`
-                # and accepts only strict json_schema response formats, so JSON is enforced
-                # by the prompt plus parse_json_object() and one retry instead.
-                "max_tokens": max_tokens,
-            },
-            timeout=cfg.timeout,
-        )
-    except httpx.TimeoutException as e:
-        raise LLMError(f"LLM server timed out after {cfg.timeout:.0f}s") from e
-    except httpx.HTTPError as e:
-        raise LLMError(f"Could not reach the LLM server ({type(e).__name__})") from e
+    body: dict[str, Any] = {
+        "model": cfg.model,
+        "messages": [
+            {"role": "system", "content": system},
+            {"role": "user", "content": user},
+        ],
+        "max_tokens": max_tokens,
+    }
+    # The organizers' server (Claude Haiku behind Open WebUI) rejected `temperature` and
+    # non-strict response formats, so remote servers get neither: JSON is enforced by the
+    # prompt plus parse_json_object() and one retry. Local Ollama accepts both, and
+    # reasoning_effort "none" turns off thinking so it can't eat the token budget.
+    local = is_local(cfg.openai_base)
+    if local:
+        body.update(temperature=0, reasoning_effort=os.getenv("LLM_REASONING_EFFORT", "none").strip() or "none")
+        if cfg.model not in _json_mode_unsupported:
+            body["response_format"] = {"type": "json_object"}
+    res = _post_chat(cfg, body)
+    if local and "response_format" in body and res.status_code >= 400 and "structured output" in res.text:
+        # Some Ollama models (gemma4 as of 0.40) have no JSON mode: remember, and ask without it.
+        _json_mode_unsupported.add(cfg.model)
+        del body["response_format"]
+        res = _post_chat(cfg, body)
 
     if res.status_code in (401, 403):
         raise LLMError(f"LLM server rejected the key (HTTP {res.status_code})")
@@ -141,6 +197,20 @@ def _call_openai_compatible(cfg: Config, system: str, user: str, max_tokens: int
     except (ValueError, KeyError, IndexError, TypeError) as e:
         raise LLMError("LLM server returned an unexpected response shape") from e
     return content or ""
+
+
+def _post_chat(cfg: Config, body: dict[str, Any]) -> httpx.Response:
+    try:
+        return httpx.post(
+            f"{cfg.openai_base}/chat/completions",
+            headers={"Authorization": f"Bearer {cfg.openai_key}"},
+            json=body,
+            timeout=cfg.timeout,
+        )
+    except httpx.TimeoutException as e:
+        raise LLMError(f"LLM server timed out after {cfg.timeout:.0f}s") from e
+    except httpx.HTTPError as e:
+        raise LLMError(f"Could not reach the LLM server ({type(e).__name__})") from e
 
 
 def _call_anthropic(cfg: Config, system: str, user: str, max_tokens: int) -> str:
@@ -240,7 +310,7 @@ def health(force: bool = False) -> dict[str, Any]:
     return result
 
 
-# Embeddings: the organizers' OpenAI-compatible embedding server (qwen3-embedding).
+# Embeddings: any OpenAI-compatible /embeddings endpoint (local Ollama with embeddinggemma).
 
 EMBED_BATCH = 32
 EMBED_RETRY_AFTER_SECONDS = 60.0
