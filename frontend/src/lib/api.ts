@@ -1,5 +1,5 @@
 import * as mock from '../mocks/server'
-import type { AskResponse, CreateWorkspaceRequest, FileItem, Workspace } from './types'
+import type { AskResult, CreateWorkspaceRequest, FileItem, Workspace } from './types'
 
 export const USE_MOCKS = import.meta.env.VITE_USE_MOCKS === 'true'
 const API_BASE = (import.meta.env.VITE_API_BASE ?? 'http://localhost:8000').replace(/\/$/, '')
@@ -67,8 +67,11 @@ export const api = {
     return request(`/api/workspaces/${encodeURIComponent(ws)}/files`, { method: 'POST', body })
   },
 
-  ask: (ws: string, question: string): Promise<AskResponse> =>
+  ask: (ws: string, question: string, threadId?: string): Promise<AskResult> =>
     USE_MOCKS
-      ? mock.ask(ws, question)
-      : request(`/api/workspaces/${encodeURIComponent(ws)}/ask`, json('POST', { question })),
+      ? mock.ask(ws, question, threadId)
+      : request(
+          `/api/workspaces/${encodeURIComponent(ws)}/ask`,
+          json('POST', threadId ? { question, thread_id: threadId } : { question }),
+        ),
 }

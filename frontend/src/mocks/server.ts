@@ -1,5 +1,5 @@
 // In-memory mock backend. Same shapes as the real API (src/lib/types.ts).
-import type { AskResponse, CreateWorkspaceRequest, FileItem, FileType, Workspace } from '../lib/types'
+import type { AskResponse, AskResult, CreateWorkspaceRequest, FileItem, FileType, Workspace } from '../lib/types'
 import * as data from './data'
 
 const state = {
@@ -117,7 +117,12 @@ export async function uploadFiles(ws: string, files: File[]): Promise<FileItem[]
   return structuredClone(added)
 }
 
-export async function ask(ws: string, question: string): Promise<AskResponse> {
+export async function ask(ws: string, question: string, threadId?: string): Promise<AskResult> {
+  const response = await answer(ws, question)
+  return { ...response, thread_id: threadId ?? crypto.randomUUID().slice(0, 12), history_id: crypto.randomUUID().slice(0, 12) }
+}
+
+async function answer(ws: string, question: string): Promise<AskResponse> {
   const started = performance.now()
   await delay(1200)
   const ready = filesOf(ws).filter((f) => f.status === 'ready').length
