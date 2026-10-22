@@ -9,6 +9,8 @@ MinerU (verify every command with --help first):
 - Block crop: mineru read "<block locator>" --format image --output <path>.png
 - Fallback crop: render the page image with mineru read "<page locator>" --format image, then crop it with Pillow using the block's bbox. If that also fails, use the page image.
 - Locator format: doc:{short_id}/tier:{tier}/page:{n}/block:{m}. Block m is the m-th blank-line-separated paragraph of page n in the parse output's markdown (a table is one block). Tier: basic (MINERU_TIER).
+- Tier per file (parsing.choose_tier): PDFs with a text layer (pypdf: more than 200 extractable characters on at least 2 of the first 3 pages) and Office/HTML files use MinerU --tier flash (no OCR or layout models; e.g. Rules of Court, 196 pages: 39.5 s instead of many minutes). Scanned PDFs (no text layer), unreadable PDFs, and images keep the basic tier. Flash output has the same markdown, page/block locators (doc:{id}/tier:flash/...), bboxes in MinerU's store, and `mineru read` crops. If flash fails, the file is retried on basic. The tier and parse time are stored on the file record (tier, parse_seconds). While parsing, the progress label is "Reading N pages…" from pypdf's page count (MinerU's CLI reports no per-page progress).
+- Embedding a parsed file's blocks runs on its own thread, so the parse queue (one worker) never waits on it.
 - Non-PDF files are parsed without --pages (MinerU rejects it). Plain-text files (md, txt, csv) skip MinerU, which refuses them: one block per paragraph, locator text:{file_id}/page:1/block:{m}, and crop_url null (the UI shows the text).
 
 ## Ask pipeline

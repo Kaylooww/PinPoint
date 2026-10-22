@@ -1,3 +1,4 @@
+import logging
 import mimetypes
 import threading
 from collections.abc import AsyncIterator
@@ -12,6 +13,12 @@ from pydantic import BaseModel, Field
 from . import answer, crops, folders, llm, parsing, picker, search, storage
 
 MAX_UPLOAD_BYTES = 50 * 1024 * 1024
+
+# Our own log lines (tier choice, parse times, embedding failures) next to uvicorn's.
+_handler = logging.StreamHandler()
+_handler.setFormatter(logging.Formatter("%(levelname)s:     %(name)s: %(message)s"))
+logging.getLogger("pinpoint").addHandler(_handler)
+logging.getLogger("pinpoint").setLevel(logging.INFO)
 
 
 @asynccontextmanager
