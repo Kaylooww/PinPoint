@@ -92,14 +92,35 @@ BLOCK_SPLIT = re.compile(r"\n\s*\n")
 TABLE_RULE = re.compile(r"^\s*\|?\s*:?-{3,}")
 
 
+HTML_COMMENT = re.compile(r"<!--.*?-->", re.DOTALL)
+EMPHASIS = re.compile(r"\*{2,}|_{2,}|`+")
+
+
+def _clean_text(line: str) -> str:
+    """Strip parser artifacts: HTML comments, heading marks, emphasis and asterisk runs."""
+    line = HTML_COMMENT.sub("", line)
+    line = re.sub(r"^#{1,6}\s+", "", line.strip())
+    return re.sub(r"\s{2,}", " ", EMPHASIS.sub("", line)).strip()
+
+
+def _table_rows(markdown: str) -> list[list[str]] | None:
+    """Rows of cells if the block is a markdown table (rule rows dropped), else None."""
+    lines = [ln for ln in markdown.splitlines() if ln.strip()]
+    if len(lines) < 2 or not all(ln.strip().startswith("|") for ln in lines):
+        return None
+    rows = [[_clean_text(c) for c in ln.strip().strip("|").split("|")] for ln in lines if not TABLE_RULE.match(ln)]
+    return [r for r in rows if any(r)] or None
+
+
 def _clean_block(markdown: str) -> str:
     lines = []
-    for line in markdown.splitlines():
+    for line in HTML_COMMENT.sub("", markdown).splitlines():
         if TABLE_RULE.match(line):
             continue
-        line = re.sub(r"^#{1,6}\s+", "", line.strip())
         if "|" in line:
-            line = " · ".join(cell.strip() for cell in line.strip("|").split("|") if cell.strip())
+            line = " · ".join(c for c in (_clean_text(cell) for cell in line.strip().strip("|").split("|")) if c)
+        else:
+            line = _clean_text(line)
         if line:
             lines.append(line)
     return "\n".join(lines)
@@ -151,6 +172,9 @@ def extract_blocks(raw: dict[str, Any], file_id: str, file_name: str) -> tuple[l
             }
             if (page, m) in bboxes:
                 block["bbox"] = bboxes[(page, m)]
+            table = _table_rows(chunk)
+            if table:
+                block["table"] = table
             blocks.append(block)
     return blocks, pages
 

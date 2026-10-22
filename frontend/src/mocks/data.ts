@@ -59,6 +59,7 @@ export const santosAnswer: Omit<AskResponse, 'searched_files' | 'elapsed_ms'> = 
       page: 2,
       locator: 'doc:mock01/tier:basic/page:2/block:4',
       text: 'WHEREFORE, the Court grants petitioner fifteen (15) days, until 14 March 2026, within which to file the required response.',
+      excerpt: 'until 14 March 2026, within which to file the required response',
       crop_url: '/mock-crops/santos-motion.png',
     },
     {
@@ -70,6 +71,7 @@ export const santosAnswer: Omit<AskResponse, 'searched_files' | 'elapsed_ms'> = 
       page: 1,
       locator: 'doc:mock02/tier:basic/page:1/block:2',
       text: 'ORDER. Acting on the motion, the extension is granted on 27 February 2026 for a period of fifteen days.',
+      excerpt: 'the extension is granted on 27 February 2026 for a period of fifteen days',
       crop_url: '/mock-crops/court-order.png',
     },
   ],

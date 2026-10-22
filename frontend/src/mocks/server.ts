@@ -1,5 +1,5 @@
 // In-memory mock backend. Same shapes as the real API (src/lib/types.ts).
-import type { AskResponse, AskResult, CreateWorkspaceRequest, FileItem, FileType, Folder, HistoryDetail, HistoryItem, KnowledgeStats, Note, Workspace } from '../lib/types'
+import type { AskResponse, AskResult, CreateWorkspaceRequest, FileItem, FileText, FileType, Folder, HistoryDetail, HistoryItem, KnowledgeStats, Note, Workspace } from '../lib/types'
 import * as data from './data'
 
 const state = {
@@ -125,7 +125,7 @@ export async function ask(ws: string, question: string, threadId?: string): Prom
   const history = (state.history[ws] ??= [])
   const thread_id = threadId && history.some((h) => h.thread_id === threadId) ? threadId : crypto.randomUUID().slice(0, 12)
   const id = crypto.randomUUID().slice(0, 12)
-  history.push({ id, question, response, thread_id, created_at: new Date().toISOString(), saved: false })
+  history.push({ id, question, response, thread_id, created_at: new Date().toISOString(), saved: response.status === 'answered' })
   return { ...structuredClone(response), thread_id, history_id: id }
 }
 
@@ -142,7 +142,7 @@ async function answer(ws: string, question: string): Promise<AskResponse> {
       status: 'answered',
       answer: [{ text: 'The client prefers to be updated by email rather than by phone.', sources: ['c1'] }],
       citations: [
-        { id: 'c1', number: 1, kind: 'note', file_id: note.id, file_name: 'Note', page: 1, locator: `note:${note.id}`, text: note.text, crop_url: null },
+        { id: 'c1', number: 1, kind: 'note', file_id: note.id, file_name: 'Note', page: 1, locator: `note:${note.id}`, text: note.text, excerpt: note.text, crop_url: null },
       ],
       searched_files: ready,
       elapsed_ms,
@@ -281,5 +281,19 @@ export async function knowledge(ws: string): Promise<KnowledgeStats> {
     notes: (state.notes[ws] ?? []).length,
     folders: (state.folders[ws] ?? []).length,
     last_indexed_at: new Date(Date.now() - 2 * 60_000).toISOString(),
+  }
+}
+
+export async function getFileText(ws: string, fileId: string): Promise<FileText> {
+  await delay(200)
+  const file = filesOf(ws).find((f) => f.id === fileId)
+  const cited = data.santosAnswer.citations.filter((c) => c.file_id === fileId)
+  return {
+    id: fileId,
+    name: file?.name ?? cited[0]?.file_name ?? 'Document',
+    type: file?.type ?? 'pdf',
+    pages: cited.length
+      ? cited.map((c) => ({ page: c.page, blocks: [{ text: c.text }] }))
+      : [{ page: 1, blocks: [{ text: 'Mock mode has no parsed text for this file.' }] }],
   }
 }

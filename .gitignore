@@ -7,3 +7,4 @@ frontend/.env.local
 backend/samples/
 .mineru-service.lock
 blobs/
+backend/demo_files/reyes-partners/

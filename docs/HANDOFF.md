@@ -1,6 +1,6 @@
 # PinPoint — Handoff
 
-Last updated: Thursday 14:06, warm_cache.py ready for step 20. Branch: demo-prep.
+Last updated: Thursday 14:36, all four late features done and the final demo run passed. Branch: memory-viewer-demo (PR open).
 
 ## Done (and tested)
 - Phase A 1–6: backend core on MinerU **basic** tier; both samples parse to ready; crops; API end-to-end.
@@ -13,6 +13,8 @@ Last updated: Thursday 14:06, warm_cache.py ready for step 20. Branch: demo-prep
 - Phase D 17: knowledge stats strip at the top of the Files tab (GET /knowledge), refreshed when files change. Browser-checked against the API.
 
 ## In progress
+- Final demo run (both workspaces, light + dark, real backend): every step passes — upload → ready, cited answer saved by default, crops, panel excerpt, Open document (PDF at the cited page), follow-up, not-found, Memory; Villanueva files, receipt photo viewer, CSV as a table, memo, three questions incl. not-found. No real bugs found in this run (two failures were test-script step-order issues).
+- Four late features, one slice at a time: (1) auto-save answered questions — DONE; (2) readable excerpt + full text in the citation panel — DONE (Citation.excerpt always literally from the block; Citation.table for tables; collapsible full text; LLM max_tokens raised because reasoning tokens truncated the JSON); (3) document viewer + raw/text endpoints — DONE (overlay from file rows and the citation panel's Open document; PDF in the browser's viewer at #page=N, image fit/actual size, txt/md/csv text, office files as parsed pages; the parsed-pages view is untested in the browser for lack of an office file); (4) second demo client "Villanueva Accounting" with fictional generated documents — DONE (scripts/make_demo_files.py; reset_demo.py rebuilds both; 6 questions verified and listed in DEMO.md). The document viewer is an overlay panel, not a route, so App.tsx routes stay untouched for the Landing/Sign in patch.
 - Phase E (started early; 18b Landing/Sign in comes as a patch from another session — don't touch LandingPage.tsx, SignInPage.tsx, or the routes in App.tsx).
 - Full demo run (light + dark) against the real backend: all steps pass after two fixes — (1) crops were unreadable (wide paragraph strips shrank to ~25 px): cards now fit the crop's height and show the start of the passage; the panel is 560 px wide and very wide strips keep a 112 px height and scroll sideways; (2) the DEMO.md follow-up "Who is the renter?" returned Not found ("renter" is in nearly every clause) → script now uses "Who is the renter named in that agreement?".
 - Step 22 drafted: docs/DEMO.md (start order, checklist, click-by-click script with questions verified on the samples, fallback plan). Swap in docs/DEMO_QUESTIONS.md when it exists.
@@ -20,7 +22,7 @@ Last updated: Thursday 14:06, warm_cache.py ready for step 20. Branch: demo-prep
 - Phase D frontend halves, in order 13 → 18.
 
 ## Exact next step
-- Step 20 once docs/DEMO_QUESTIONS.md exists: `cd backend && .venv/bin/python scripts/warm_cache.py` (asks every line ending in "?", reports status/citations/crops; the cache is in memory, so run it after the final backend start), then re-check each answer. Put the final demo files, with readable names, in backend/demo_files/ and rerun scripts/reset_demo.py first.
+- Merge the PR. When docs/DEMO_QUESTIONS.md exists (DEMO.md lists 10 verified suggestions), run reset_demo.py, then warm_cache.py as the last step after the final backend start. warm_cache.py takes --workspace for Villanueva questions.
 
 ## How to run
 ```sh
@@ -28,12 +30,13 @@ mineru server start          # basic tier, managed; check: mineru server status 
 cd backend && source .venv/bin/activate && uvicorn app.main:app --reload --port 8000
 cd frontend && npm run dev   # http://localhost:5173
 ```
-Reset the demo workspace (servers running): `cd backend && .venv/bin/python scripts/reset_demo.py`
+Reset both demo workspaces (servers running): `cd backend && .venv/bin/python scripts/reset_demo.py`
 Warm the answer cache (after the final backend start): `cd backend && .venv/bin/python scripts/warm_cache.py`
 
-Tests (throwaway data dir): `cd backend && .venv/bin/python tests/test_core_fixture.py` and `.venv/bin/python tests/test_folders.py`. Add `LLM_PROVIDER=none` to test extractive mode.
+Tests (throwaway data dir): `cd backend && .venv/bin/python tests/test_core_fixture.py`, `tests/test_folders.py`, and `tests/test_excerpts.py` (no network), and `tests/test_documents.py` (raw/text endpoints refuse unknown and path-like ids). Add `LLM_PROVIDER=none` to test extractive mode.
 
 ## Known issues
+- uvicorn --reload re-seeds an empty Reyes & Partners on restart; reset_demo.py now tolerates that race (it happened once when a script edit triggered a reload mid-reset).
 - A git checkout/pull in this folder while `npm run dev` runs can stall Vite's Tailwind step (pages lose all styling). Fix: restart `npm run dev`. Happened once at 13:54.
 - Bare follow-ups with only a very common word ("Who is the renter?") can retrieve the wrong passages and return Not found.
 - Figma MCP (claude.ai connector) disconnected at 13:35; new screens reuse existing components until it is re-authenticated.

@@ -15,14 +15,14 @@ MinerU (verify every command with --help first):
 1. Query expansion: the LLM returns 5–10 keywords and synonyms (JSON).
 2. Retrieval: top 6 blocks by BM25 over the question plus the expansions.
 3. Answer: the LLM receives the blocks as b1…b6 and returns JSON only:
-   {"status":"answered"|"not_found","answer":[{"text":"...","sources":["b1"]}],"reason":"..."}
+   {"status":"answered"|"not_found","answer":[{"text":"...","sources":["b1"]}],"quotes":{"b1":"exact supporting words from b1"},"reason":"..."}
 4. Validation in code: drop sentences whose sources aren't in the provided ids. If nothing is left, return not_found. On invalid JSON, retry once with a stricter prompt, then return not_found.
 5. Create (or reuse cached) crops for the cited blocks only.
 
 ## LLM modes
 - generate (LLM_PROVIDER is openai_compatible — Claude Haiku via the organizers' Open WebUI server — or anthropic): the LLM does query expansion and writes the cited answer, as described above.
 - extractive (LLM_PROVIDER=none, or automatic when the LLM errors or times out): skip query expansion, run BM25 on the question only, and return the top 1–3 blocks as the answer sentences, each citing its own block, with the label "Showing matching passages." Crops, the citation panel, notes, history, and folders all work the same way.
-- Keep LLM calls small: at most 6 blocks of context, max_tokens 500, short JSON outputs.
+- Keep LLM calls small: at most 6 blocks of context and short JSON outputs. max_tokens is 1200 for the answer and 400 for query expansion, because the model's reasoning tokens count toward it (at 500, answers with quotes were cut off mid-JSON). A not_found caused by invalid JSON is never cached.
 - backend/app/llm.py is the only module that talks to an LLM: chat_json(system, user, max_tokens=500) -> dict, and health() -> {ok, provider, model, latency_ms, mode}. GET /api/health reports llm and mineru status.
 
 ## API contract (frontend/src/lib/types.ts must match)
@@ -37,14 +37,14 @@ GET  /api/crops/{crop_id}.png → image
 Workspace: {id, name, industry, file_count, updated_at}
 FileItem: {id, name, type: "pdf"|"image"|"doc"|"sheet"|"slides"|"other", pages, size_bytes, status: "queued"|"parsing"|"ready"|"failed", progress_label?, error?}
 AskResponse: {status: "answered"|"not_found", answer: {text, sources: string[]}[], citations: Citation[], reason?, searched_files, elapsed_ms}
-Citation: {id, number, file_id, file_name, page, locator, text, crop_url}
+Citation: {id, number, file_id, file_name, page, locator, text, excerpt, crop_url, table?}
 
 ## Persistence
 Everything lives on disk under backend/data/{ws}/ and survives restarts: workspace.json, files.json (metadata including source "upload"|"folder" and source_path), uploads/, parsed/, blocks.json, crops/, history.json, notes/ (one .md file per note), folders.json. On startup, rebuild each workspace's BM25 index from blocks.json, and reset any file stuck in "parsing" to "queued" and resume it.
 
 ## Memory
 - Notes: user-written facts saved as markdown in notes/, indexed like documents, and cited with kind "note" (no crop; the UI shows the note text).
-- History: every ask is stored with its question, response, thread_id, created_at, and saved flag.
+- History: every ask is stored with its question, response, thread_id, created_at, and saved flag. Answered questions are saved by default (they appear under Saved answers); not_found ones are not. PATCH saved toggles it.
 - Follow-ups: /ask accepts an optional thread_id. The last 3 questions and answers in the thread go ONLY to the query-expansion step, to resolve references like "that case". Answers must still cite document or note blocks. Previous AI answers are never used as sources.
 
 ## Local folders
@@ -65,13 +65,17 @@ POST   /api/workspaces/{ws}/folders {"path"} → Folder
 POST   /api/workspaces/{ws}/folders/{id}/rescan → Folder
 DELETE /api/workspaces/{ws}/folders/{id} → {"ok": true}
 GET    /api/workspaces/{ws}/knowledge → KnowledgeStats
+GET    /api/workspaces/{ws}/files/{file_id}/raw → the original file, inline, with its media type. Only files registered in files.json, looked up by id (ids match [A-Za-z0-9-]+; no paths in the URL). Uploads must resolve inside the workspace's uploads/; folder files only while their source_path is inside their connected folder; symlinks refused. 404 otherwise.
+GET    /api/workspaces/{ws}/files/{file_id}/text → FileText (parsed text by page, for formats browsers can't render: docx, xlsx, pptx)
 
 HistoryItem: {id, question, status, answer_preview, thread_id, created_at, saved}
 Note: {id, text, created_at}
 Folder: {id, path, file_count, status: "scanning"|"ready"|"failed", last_scanned_at, error?}
 KnowledgeStats: {files, ready_files, pages, passages, notes, folders, last_indexed_at}
+FileText: {id, name, type, pages: {page, blocks: {text, table?}[]}[]}
 FileItem gains: source: "upload"|"folder", source_path?
 Citation gains: kind: "file"|"note". crop_url is null for notes and plain-text files.
+Citation.text is the block's full cleaned text with its line breaks (parser artifacts stripped: page markers, HTML comments, heading and emphasis marks). Citation.excerpt is the short supporting passage: the LLM's per-source span when it is a verbatim substring of the block (whitespace and case normalized; the excerpt is cut from the block, never the LLM's copy), otherwise the 1–3 lines or sentences with the most question and answer-term overlap. Citation.table (only for table blocks) is the block's rows of cells, for rendering as a real table.
 
 ## Data layout
 backend/data/{ws}/workspace.json, uploads/, parsed/, blocks.json, crops/

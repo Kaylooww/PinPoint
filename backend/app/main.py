@@ -1,3 +1,4 @@
+import mimetypes
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from typing import Any
@@ -100,6 +101,27 @@ async def upload_files(ws: str, files: list[UploadFile] = File(...)) -> list[dic
         parsing.enqueue(ws, record["id"])
         added.append(storage.file_view(record))
     return added
+
+
+@app.get("/api/workspaces/{ws}/files/{file_id}/raw")
+def raw_file(ws: str, file_id: str) -> FileResponse:
+    """The original document, inline. Registered files only; never a path from the URL."""
+    _require_workspace(ws)
+    path = storage.original_path(ws, file_id)
+    if path is None:
+        raise HTTPException(status_code=404, detail="File not found")
+    name = next(r["name"] for r in storage.list_file_records(ws) if r["id"] == file_id)
+    media_type = mimetypes.guess_type(name)[0] or "application/octet-stream"
+    return FileResponse(path, media_type=media_type, filename=name, content_disposition_type="inline")
+
+
+@app.get("/api/workspaces/{ws}/files/{file_id}/text")
+def file_text(ws: str, file_id: str) -> dict[str, Any]:
+    _require_workspace(ws)
+    text = storage.file_text(ws, file_id)
+    if text is None:
+        raise HTTPException(status_code=404, detail="File not found")
+    return text
 
 
 @app.post("/api/workspaces/{ws}/ask")

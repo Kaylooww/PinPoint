@@ -154,13 +154,13 @@ function HistorySections({ ws }: { ws: string }) {
   return (
     <>
       <section className="flex flex-col gap-4" aria-label="Saved answers">
-        <SectionHeader title="Saved answers" hint="Answers you saved with the Save button. Open one to see it with its sources." />
+        <SectionHeader title="Saved answers" hint="Every answered question is saved here automatically. Open one to see it with its sources; use Save on the Ask tab to remove one." />
         {error ? (
           <p className="text-small text-danger">{error}</p>
         ) : items === null ? (
           <div className="h-[60px] animate-pulse rounded-card bg-surface-muted" />
         ) : saved.length === 0 ? (
-          <EmptyState Icon={Bookmark} title="No saved answers yet" hint="On the Ask tab, press Save under an answer to keep it here." />
+          <EmptyState Icon={Bookmark} title="No saved answers yet" hint="Answers to questions you ask on the Ask tab are saved here automatically." />
         ) : (
           <HistoryList ws={ws} items={saved} />
         )}

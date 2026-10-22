@@ -13,7 +13,7 @@ const ICONS: Record<FileType, LucideIcon> = {
 }
 
 // Figma "File Row" (4:30): type icon, name, meta (or error), progress while parsing, status badge.
-export function FileRow({ file }: { file: FileItem }) {
+export function FileRow({ file, onOpen }: { file: FileItem; onOpen?: (file: FileItem) => void }) {
   const Icon = ICONS[file.type]
   return (
     <div className="flex items-center gap-3.5 rounded-control border border-border bg-surface px-4 py-3">
@@ -21,7 +21,18 @@ export function FileRow({ file }: { file: FileItem }) {
         <Icon size={18} strokeWidth={1.75} />
       </div>
       <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-        <p className="truncate text-body font-medium text-text">{file.name}</p>
+        {onOpen && file.status === 'ready' ? (
+          <button
+            type="button"
+            onClick={() => onOpen(file)}
+            title="Open document"
+            className="truncate text-left text-body font-medium text-text hover:text-accent hover:underline"
+          >
+            {file.name}
+          </button>
+        ) : (
+          <p className="truncate text-body font-medium text-text">{file.name}</p>
+        )}
         {file.status === 'failed' ? (
           <p className="text-small text-danger">{file.error ?? "Couldn't read this file."}</p>
         ) : (
