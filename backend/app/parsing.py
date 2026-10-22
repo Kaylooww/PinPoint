@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import json
+import os
+import re
 import shutil
 import subprocess
 from concurrent.futures import ThreadPoolExecutor
@@ -12,6 +14,7 @@ from typing import Any
 from . import search, storage
 
 PARSE_WAIT_SECONDS = 900
+MINERU_TIER = os.getenv("MINERU_TIER", "basic")
 
 # One parse at a time: MinerU's local server does the heavy lifting.
 _executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="parse")
@@ -62,21 +65,94 @@ def server_status() -> dict[str, Any]:
 
 def parse_file(path: str) -> dict[str, Any]:
     """Raw `mineru parse --json` output for one file (all pages)."""
-    proc = run_mineru(
-        ["parse", path, "--pages", "all", "--json", "--wait", str(PARSE_WAIT_SECONDS)],
-        timeout=PARSE_WAIT_SECONDS + 60,
-    )
+    args = ["parse", path, "--tier", MINERU_TIER, "--json", "--wait", str(PARSE_WAIT_SECONDS), "--limit", "50000000"]
+    if path.lower().endswith(".pdf"):
+        args += ["--pages", "all"]  # MinerU rejects --pages for non-PDF files
+    proc = run_mineru(args, timeout=PARSE_WAIT_SECONDS + 60)
+    try:
+        raw = json.loads(proc.stdout)
+    except json.JSONDecodeError as e:
+        raise ParseError(_last_line(proc) if proc.returncode else "mineru returned non-JSON output") from e
+    if "error" in raw:
+        raise ParseError(str(raw["error"].get("message") or raw["error"]))
     if proc.returncode != 0:
         raise ParseError(_last_line(proc))
+    return raw
+
+
+# Real `mineru parse --json` output (inspected in backend/samples/*.mineru.json):
+#   {"parse": {short_id, tier, status, ...},
+#    "content": {short_id, tier, format: "markdown", content: "<!-- page 1 of 2 -->\n\n# Title\n\nPara...",
+#                content_ranges, truncated, ...}}
+# Each page's markdown is a list of blank-line-separated blocks, and block m (1-based) of
+# page n is addressable as doc:{short_id}/tier:{tier}/page:{n}/block:{m}. No bbox is
+# included; we read it best-effort from MinerU's own parse store for the crop fallback.
+PAGE_MARKER = re.compile(r"<!-- page (\d+) of (\d+) -->")
+BLOCK_SPLIT = re.compile(r"\n\s*\n")
+TABLE_RULE = re.compile(r"^\s*\|?\s*:?-{3,}")
+
+
+def _clean_block(markdown: str) -> str:
+    lines = []
+    for line in markdown.splitlines():
+        if TABLE_RULE.match(line):
+            continue
+        line = re.sub(r"^#{1,6}\s+", "", line.strip())
+        if "|" in line:
+            line = " · ".join(cell.strip() for cell in line.strip("|").split("|") if cell.strip())
+        if line:
+            lines.append(line)
+    return "\n".join(lines)
+
+
+def _mineru_bboxes(sha256: str, tier: str) -> dict[tuple[int, int], list[float]]:
+    """{(page, block): [x0, y0, x1, y1] normalized 0-1}, or {} if MinerU's store isn't readable."""
     try:
-        return json.loads(proc.stdout)
-    except json.JSONDecodeError as e:
-        raise ParseError("mineru returned non-JSON output") from e
+        store = Path.home() / ".mineru" / "doclib" / "parsed" / sha256[:2] / sha256 / tier
+        newest = max(store.glob("*.json"), key=lambda p: p.stat().st_mtime)
+        middle = json.loads(newest.read_text(encoding="utf-8"))
+        return {
+            (page["page_idx"] + 1, i + 1): block["bbox"]
+            for page in middle["pages"]
+            for i, block in enumerate(page["blocks"])
+            if isinstance(block.get("bbox"), list) and len(block["bbox"]) == 4
+        }
+    except (OSError, ValueError, KeyError, TypeError):
+        return {}
 
 
 def extract_blocks(raw: dict[str, Any], file_id: str, file_name: str) -> tuple[list[dict[str, Any]], int]:
     """Blocks {id, file_id, file_name, page, locator, text, bbox?} and the page count."""
-    raise NotImplementedError("written after inspecting real MinerU output")
+    content = raw.get("content") or {}
+    markdown = content.get("content") or ""
+    short_id = content.get("short_id") or raw.get("parse", {}).get("short_id")
+    tier = content.get("tier") or raw.get("parse", {}).get("tier") or MINERU_TIER
+    if not short_id:
+        raise ParseError("MinerU output has no document id")
+    bboxes = _mineru_bboxes(content.get("sha256", ""), tier)
+
+    parts = PAGE_MARKER.split(markdown)  # [before, page, total, body, page, total, body, ...]
+    blocks: list[dict[str, Any]] = []
+    pages = 0
+    for i in range(1, len(parts) - 2, 3):
+        page, total, body = int(parts[i]), int(parts[i + 1]), parts[i + 2]
+        pages = max(pages, total, page)
+        for m, chunk in enumerate((c for c in BLOCK_SPLIT.split(body) if c.strip()), start=1):
+            text = _clean_block(chunk)
+            if sum(ch.isalnum() for ch in text) < 3:  # scanner watermarks like "CS"
+                continue
+            block = {
+                "id": f"{file_id}-p{page}-b{m}",
+                "file_id": file_id,
+                "file_name": file_name,
+                "page": page,
+                "locator": f"doc:{short_id}/tier:{tier}/page:{page}/block:{m}",
+                "text": text,
+            }
+            if (page, m) in bboxes:
+                block["bbox"] = bboxes[(page, m)]
+            blocks.append(block)
+    return blocks, pages
 
 
 def _parse_job(ws: str, file_id: str) -> None:
