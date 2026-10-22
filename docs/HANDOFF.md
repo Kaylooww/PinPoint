@@ -1,6 +1,6 @@
 # PinPoint — Handoff
 
-Last updated: Thursday 15:45, full crops on citation cards. Branch: full-crops (stacked on fast-parsing / PR #9).
+Last updated: Thursday 15:47, structured answers + demo account. Branch: structured-answers (stacked on full-crops / PR #10).
 
 ## Done (and tested)
 - Phase A 1–6: backend core on MinerU **basic** tier; both samples parse to ready; crops; API end-to-end.
@@ -13,6 +13,9 @@ Last updated: Thursday 15:45, full crops on citation cards. Branch: full-crops (
 - Phase D 17: knowledge stats strip at the top of the Files tab (GET /knowledge), refreshed when files change. Browser-checked against the API.
 
 ## In progress
+- Structured answers DONE: answer items have kind paragraph | bullet | numbered | heading (missing → paragraph, so old history renders); per-item citation rule unchanged, headings uncited labels that never count as the answer, stray markdown stripped; AnswerCard renders <ul>/<ol>/H3 labels with markers per item; Copy answer keeps bullets and numbers; answer max_tokens 2000 (structured lists were cut off at 1200). Tests: tests/test_structured.py; live: House bills → intro + 6 cited bullets, Villanueva deadlines → 4 numbered, receipt → one paragraph, Santos → not found; Save, crops, history reopen OK; light + dark.
+- Demo account is now Luther Dira · luther@reyeslaw.ph (sidebar, initials LD).
+- ATTENTION: someone uploaded Rules of Court.pdf (196 pages) into Villanueva Accounting. Its ~6,000 passages crowd out the small documents there: "travel in February 2026" now returns not_found and "When was this letter sent?" misses March 2, 2026. Not deleted (no-delete rule). Fix: remove it from Villanueva (it belongs to Reyes & Partners, which already has it), or diversify retrieval per file.
 - Full crops DONE (frontend only): citation cards show the entire crop, scaled to fit (max 160px tall, never clipped; replaces the earlier "fit height, show the start" behavior); with 1–2 citations cards grow to 480px, with 3+ they keep the 264px row; the panel shows the full crop at panel width (tall crops fit 60vh), no sideways scroll. Browser-checked: Constitution Section 24 (wide), receipt photo (tall), Northwind strip, and a 3-citation answer; image inside its card with its natural aspect ratio in every case, light and dark.
 - Fast parsing DONE: digital PDFs and Office/HTML → MinerU flash; scans/images → basic; flash failure → basic. After the one restart, Rules of Court (folder file) was requeued and parsed on flash in 39.5 s (196 pages); the uploaded Constitution on flash in 3.4 s (53 pages); a new photo on basic in 3.2 s. Questions on both cite with crops (HTTP 200). Embedding moved off the parse thread (it held the queue ~3 min after Rules of Court). Nothing was deleted or re-parsed; ready files untouched. pypdf added to the backend venv.
 - Folder picker DONE: POST /api/system/pick-folder (localhost only; osascript on macOS, PowerShell FolderBrowserDialog on Windows; returns the path or null on cancel; 501 elsewhere) and a Browse… button in Connect a local folder (Choosing… while open; muted fallback hint on failure; mock returns a sample path). Tested: tests/test_picker.py (OS dialog faked) and in the browser with the picker response intercepted — cancel, 501, chosen path → connect → 4 files Ready → answer cites a folder file; light and dark. The real Finder dialog itself must be tried by a person (automation can't click it).
@@ -39,7 +42,7 @@ cd frontend && npm run dev   # http://localhost:5173
 Reset both demo workspaces (servers running): `cd backend && .venv/bin/python scripts/reset_demo.py`
 Warm the answer cache (after the final backend start): `cd backend && .venv/bin/python scripts/warm_cache.py`
 
-Tests (throwaway data dir): `cd backend && .venv/bin/python tests/test_core_fixture.py`, `tests/test_folders.py`, and `tests/test_excerpts.py` (no network), and `tests/test_documents.py` (raw/text endpoints refuse unknown and path-like ids), and `tests/test_context.py` and `tests/test_suggestions.py` (`--offline` skips their live parts), `tests/test_picker.py` (folder picker contract, dialog faked), `tests/test_tiers.py` (tier choice and flash→basic fallback), `tests/test_hybrid.py` (embedding fallbacks offline, zero outbound with LLM_PROVIDER=none, plus a live "Who is the renter?" check; `--offline` skips the live part). Add `LLM_PROVIDER=none` to test extractive mode.
+Tests (throwaway data dir): `cd backend && .venv/bin/python tests/test_core_fixture.py`, `tests/test_folders.py`, and `tests/test_excerpts.py` (no network), and `tests/test_documents.py` (raw/text endpoints refuse unknown and path-like ids), and `tests/test_context.py` and `tests/test_suggestions.py` (`--offline` skips their live parts), `tests/test_picker.py` (folder picker contract, dialog faked), `tests/test_tiers.py` (tier choice and flash→basic fallback), `tests/test_structured.py` (answer item kinds and per-item citation rules), `tests/test_hybrid.py` (embedding fallbacks offline, zero outbound with LLM_PROVIDER=none, plus a live "Who is the renter?" check; `--offline` skips the live part). Add `LLM_PROVIDER=none` to test extractive mode.
 
 ## Known issues
 - "Who signed the engagement letter for the bakery?" (not a demo question) returns not_found: the generated letter's two-column signature block splits names from titles. Don't use it in the demo.

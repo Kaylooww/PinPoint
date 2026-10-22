@@ -21,7 +21,7 @@ BLOCK_POSITION = re.compile(r"-p(\d+)-b(\d+)$")
 MAX_BLOCK_CHARS = 1200
 # The model reasons before answering and those tokens count toward max_tokens: about 450 of a
 # 500 budget went to reasoning, which cut the JSON off mid-quote. Leave room for both.
-ANSWER_MAX_TOKENS = 1200
+ANSWER_MAX_TOKENS = 2000  # structured answers (lists) are longer; reasoning shares this budget
 EXTRACTIVE_LABEL = "Showing matching passages."
 
 ANSWER_SYSTEM = """You answer questions using ONLY the numbered passages from the user's documents.
@@ -30,10 +30,16 @@ Rules:
 - Use only facts stated in the passages. No outside knowledge, no guesses.
 - Do not calculate totals or do arithmetic; quote the figures that appear instead.
 - If the passages do not contain the answer, set "status" to "not_found", leave "answer" empty, and give a one-sentence "reason".
-- Be brief: 1-3 sentences.
+- Be brief and easy to scan. Format "answer" as a list of items, each with a "kind":
+  - Start with a one-sentence direct answer ("paragraph").
+  - When the answer names 3 or more things (types of bills, requirements, parties, fees), the first paragraph says what they are in general, then give one "bullet" item per thing. Do not pack the list into one sentence.
+  - Use "numbered" items for steps, procedures, or anything in order (deadlines by date, filing steps).
+  - Use at most one or two "heading" items (a label of up to 6 words, "sources" may be empty), only for answers with distinct groups.
+  - One fact per item, short sentences, plain language, no markdown symbols in the text (no **, #, or -).
+  - A simple question with one fact is a single "paragraph". Don't force lists.
 - In "quotes", for each passage you cite, copy the shortest span of that passage that supports the answer, exactly as written (same words, spelling, and typos; do not fix, reword, or shorten inside the span).
 - If the status is "not_found" but a passage covers something close to what was asked (for example the same kind of document with a different date, number, or name), add "suggestion": {"text": "Did you mean ...?", "question": "the question asked again about what the passage actually contains", "sources": ["b2"]}. "text" is one short question that names the close match and does not contain the answer. Use only dates, numbers, and names exactly as they appear in those passages. Never answer the original question from a mismatched passage; the status stays "not_found".
-Respond as {"status": "answered" | "not_found", "answer": [{"text": "...", "sources": ["b1"]}], "quotes": {"b1": "exact words from b1"}, "reason": "...", "suggestion": {"text": "...", "question": "...", "sources": ["b2"]}}"""
+Respond as {"status": "answered" | "not_found", "answer": [{"kind": "paragraph" | "bullet" | "numbered" | "heading", "text": "...", "sources": ["b1"]}], "quotes": {"b1": "exact words from b1"}, "reason": "...", "suggestion": {"text": "...", "question": "...", "sources": ["b2"]}}"""
 
 _cache: dict[tuple[str, str, tuple[str, ...]], dict[str, Any]] = {}
 _cache_guard = threading.Lock()
@@ -177,6 +183,16 @@ def validate_suggestion(raw: Any, blocks: list[dict[str, Any]]) -> dict[str, str
 
 
 MAX_CITATION_CHARS = 4000
+ITEM_KINDS = ("paragraph", "bullet", "numbered", "heading")
+MAX_HEADING_WORDS = 8
+LEADING_MARKER = re.compile(r"^\s*(?:#{1,6}\s+|[-*+•]\s+|\d{1,3}[.)]\s+)")
+INLINE_MARKUP = re.compile(r"\*\*|__|`|(?<!\w)\*(?=\S)|(?<=\S)\*(?!\w)")
+
+
+def clean_item_text(text: str) -> str:
+    """Strip stray markdown the model may add (list markers, #, **, backticks)."""
+    text = LEADING_MARKER.sub("", text.strip())
+    return re.sub(r"\s{2,}", " ", INLINE_MARKUP.sub("", text)).strip()
 
 
 def _citation(ws: str, block: dict[str, Any], n: int, query: str, quote: str | None = None) -> dict[str, Any]:
@@ -253,22 +269,23 @@ def _near_matches(
 
 def _cite(
     ws: str,
-    sentences: list[tuple[str, list[dict[str, Any]]]],
+    sentences: list[tuple[str, list[dict[str, Any]], str]],
     question: str,
     quotes: dict[str, str] | None = None,
 ) -> tuple[list, list]:
     """Number cited blocks by first appearance; return (answer, citations) in the API shape.
 
-    `quotes` maps block id -> the LLM's proposed supporting span, used only if verbatim.
+    `sentences` are (text, blocks, kind). `quotes` maps block id -> the LLM's proposed
+    supporting span, used only if verbatim.
     """
     numbers: dict[str, int] = {}
     citations: list[dict[str, Any]] = []
     answer: list[dict[str, Any]] = []
     support: dict[str, list[str]] = {}
-    for text, blocks in sentences:
+    for text, blocks, _ in sentences:
         for block in blocks:
             support.setdefault(block["id"], []).append(text)
-    for text, blocks in sentences:
+    for text, blocks, kind in sentences:
         ids = []
         for block in blocks:
             if block["id"] not in numbers:
@@ -279,7 +296,7 @@ def _cite(
             cid = f"c{numbers[block['id']]}"
             if cid not in ids:
                 ids.append(cid)
-        answer.append({"text": text, "sources": ids})
+        answer.append({"kind": kind, "text": text, "sources": ids})
     return answer, citations
 
 
@@ -291,8 +308,37 @@ def _extractive(
         return _not_found("No passages in these files match the question.", searched_files, started)
     best = hits[0][1]
     hits = [(b, s) for b, s in hits if s >= best * 0.25]
-    answer, citations = _cite(ws, [(_snippet(b["text"], 320), [b]) for b, _ in hits], question)
+    answer, citations = _cite(ws, [(_snippet(b["text"], 320), [b], "paragraph") for b, _ in hits], question)
     return _response("answered", answer, citations, searched_files, started, EXTRACTIVE_LABEL)
+
+
+def validate_items(reply: dict[str, Any], by_id: dict[str, dict[str, Any]]) -> list[tuple[str, list[dict[str, Any]], str]]:
+    """Validation in code: (text, blocks, kind) for items whose sources are passages we sent.
+
+    Every non-heading item must cite at least one valid passage, or it's dropped. Headings
+    may have no sources but are not claims: they are kept only before a factual item, and
+    an answer of headings alone is no answer. Long "headings" are demoted to paragraphs.
+    """
+    raw_answer = reply.get("answer") if reply.get("status") == "answered" else []
+    items: list[tuple[str, list[dict[str, Any]], str]] = []
+    for item in raw_answer if isinstance(raw_answer, list) else []:
+        if not isinstance(item, dict):
+            continue
+        text = clean_item_text(str(item.get("text", "")))
+        kind = item.get("kind") if item.get("kind") in ITEM_KINDS else "paragraph"
+        if kind == "heading" and len(text.split()) > MAX_HEADING_WORDS:
+            kind = "paragraph"
+        sources = item.get("sources") if isinstance(item.get("sources"), list) else []
+        blocks = [by_id[s] for s in dict.fromkeys(str(s).strip() for s in sources) if s in by_id]
+        if text and (blocks or kind == "heading"):
+            items.append((text, blocks, kind))
+    # Drop headings with nothing factual after them (before the next heading or at the end).
+    kept: list[tuple[str, list[dict[str, Any]], str]] = []
+    for i, item in enumerate(items):
+        if item[2] == "heading" and not any(k != "heading" for _, _, k in items[i + 1 : next((j for j in range(i + 1, len(items)) if items[j][2] == "heading"), len(items))]):
+            continue
+        kept.append(item)
+    return kept if any(k != "heading" for _, _, k in kept) else []
 
 
 def _generate(
@@ -324,18 +370,7 @@ def _generate(
     except llm.LLMBadJSON:
         return {**_not_found("The answer could not be checked against the files.", searched_files, started), "_nocache": True}
 
-    # Validation in code: keep only sentences whose sources are passages we actually sent.
-    sentences: list[tuple[str, list[dict[str, Any]]]] = []
-    raw_answer = reply.get("answer") if reply.get("status") == "answered" else []
-    for item in raw_answer if isinstance(raw_answer, list) else []:
-        if not isinstance(item, dict):
-            continue
-        text = str(item.get("text", "")).strip()
-        sources = item.get("sources") if isinstance(item.get("sources"), list) else []
-        blocks = [by_id[s] for s in dict.fromkeys(str(s).strip() for s in sources) if s in by_id]
-        if text and blocks:
-            sentences.append((text, blocks))
-
+    sentences = validate_items(reply, by_id)
     if not sentences:
         reason = str(reply.get("reason") or "").strip() or "These files don't contain the answer."
         near, suggestion = _near_matches(ws, question, [b for b, _ in hits], context, reply.get("suggestion"), by_id)

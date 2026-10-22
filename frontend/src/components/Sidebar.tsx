@@ -48,11 +48,11 @@ export function Sidebar() {
         <ThemeToggle />
         <div className="flex items-center gap-2.5 border-t border-border pt-3.5">
           <div className="flex size-8 shrink-0 items-center justify-center rounded-pill bg-accent-soft text-label text-accent">
-            MR
+            LD
           </div>
           <div className="min-w-0 font-medium">
-            <p className="truncate text-body text-text">Maria Reyes</p>
-            <p className="truncate text-label text-muted">maria@reyeslaw.ph</p>
+            <p className="truncate text-body text-text">Luther Dira</p>
+            <p className="truncate text-label text-muted">luther@reyeslaw.ph</p>
           </div>
         </div>
       </div>

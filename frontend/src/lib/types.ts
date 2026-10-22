@@ -45,8 +45,13 @@ export type Citation = {
   table?: string[][]
 }
 
+export type AnswerKind = 'paragraph' | 'bullet' | 'numbered' | 'heading'
+
 export type AnswerSentence = {
+  /** Missing in answers saved before structured answers: treat as "paragraph". */
+  kind?: AnswerKind
   text: string
+  /** Empty only for "heading" items, which are labels, not claims. */
   sources: string[]
 }
 
