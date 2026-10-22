@@ -1,25 +1,18 @@
 # PinPoint — Handoff
 
-Last updated: Thursday 13:30, after the Phase D backend work.
+Last updated: Thursday 13:37, after Phase C.
 
-## Done
-- Phase A (backend core), steps 1–6: committed and pushed.
-  - MinerU runs the **basic** tier (standard download abandoned). Both samples parse to ready.
-  - Block extraction from real MinerU output; crops via `mineru read --format image` with a Pillow bbox fallback.
-  - End-to-end over the API: contract penalty question and receipt invoice question answered with cited crops; the Santos question returns not_found.
-- Phase D backend halves (frontend halves not started):
-  - 13 Notes: GET/POST/DELETE notes, indexed and cited as kind "note" (crop_url null).
-  - 14 Folders: connect, rescan, disconnect with every safety limit; plain-text files skip MinerU.
-  - 15 History: history.json, GET/GET one/PATCH saved.
-  - 16 Threads: /ask takes thread_id, returns thread_id + history_id.
-  - 17 Knowledge: GET /knowledge.
+## Done (and tested)
+- Phase A 1–6: backend core on MinerU **basic** tier; both samples parse to ready; crops; API end-to-end.
+- Phase B 7–10: components, Ask + citation panel, Files + folder upload, "/" → /w/reyes-partners/ask.
+- Phase C 11–12: mocks off (frontend/.env.local VITE_USE_MOCKS=false); ask() returns AskResult. Browser walkthrough against the real backend passed: upload → parsing → ready → cited answer → crops load → panel → Escape → dark mode → not-found → answer from an uploaded .md (text card, no crop). No console errors or external requests.
+- Phase D backend halves (tests pass): 13 notes, 14 folders, 15 history, 16 threads, 17 knowledge.
 
 ## In progress
-- Phase B (frontend core, steps 7–10): a frontend agent session is building components, Ask, Files, and the "/" redirect with mocks on. Not committed yet.
+- Phase D frontend halves, in order 13 → 18.
 
 ## Exact next step
-- When Phase B lands: commit it, then Phase C step 11 (VITE_USE_MOCKS=false, align types.ts with the real API: AskResult adds thread_id and history_id), then step 12 (browser walkthrough).
-- Then the frontend halves of Phase D items 13–18, in order.
+- 13 Notes UI: Memory tab (add/delete notes; one-line explainer), note citations as note cards on Ask. Then 14 folders UI, 15 history/saved, 16 follow-ups, 17 stats strip, 18 workspaces/sign-in/landing.
 
 ## How to run
 ```sh
@@ -30,6 +23,8 @@ cd frontend && npm run dev   # http://localhost:5173
 Tests (throwaway data dir): `cd backend && .venv/bin/python tests/test_core_fixture.py` and `.venv/bin/python tests/test_folders.py`. Add `LLM_PROVIDER=none` to test extractive mode.
 
 ## Known issues
+- Figma MCP (claude.ai connector) disconnected at 13:35; new screens reuse existing components until it is re-authenticated.
+- Browser walkthrough driver (CDP, no deps) lives in the agent scratchpad, not the repo.
 - Start `mineru server` from a stable directory: its managed parse service writes `.mineru-service.lock` and `blobs/` into the current directory (both git-ignored).
 - The organizers' server rejects `temperature` and non-strict `response_format`; llm.py sends neither.
 - `backend/samples/` holds real documents and is git-ignored (the repo is public).
