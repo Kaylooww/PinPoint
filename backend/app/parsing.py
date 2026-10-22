@@ -3,10 +3,12 @@
 from __future__ import annotations
 
 import json
+import logging
 import os
 import re
 import shutil
 import subprocess
+import time
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import Any
@@ -15,9 +17,19 @@ from . import search, storage
 
 PARSE_WAIT_SECONDS = 900
 MINERU_TIER = os.getenv("MINERU_TIER", "basic")
+# Digital documents (a real text layer) don't need OCR or layout models: MinerU's "flash"
+# tier reads them in seconds instead of minutes. Scans and photos keep MINERU_TIER (basic).
+FAST_TIER = "flash"
+TEXT_LAYER_MIN_CHARS = 200  # per page, over the first 3 pages
+OFFICE_EXTENSIONS = {"docx", "doc", "xlsx", "xls", "pptx", "ppt", "html", "htm", "odt", "ods", "odp", "rtf"}
+
+log = logging.getLogger("pinpoint.parsing")
 
 # One parse at a time: MinerU's local server does the heavy lifting.
 _executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="parse")
+# Embedding a large document can take minutes; do it on its own thread so the parse queue
+# keeps moving (a ready file is searchable by BM25 right away; vectors fill in behind it).
+_embed_executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="embed")
 
 
 class ParseError(Exception):
@@ -63,9 +75,35 @@ def server_status() -> dict[str, Any]:
     return {"ok": True, "status": status}
 
 
-def parse_file(path: str) -> dict[str, Any]:
+def pdf_info(path: str) -> tuple[int, bool]:
+    """(page count, has a text layer) for a PDF; (0, False) if it can't be read."""
+    try:
+        from pypdf import PdfReader
+
+        reader = PdfReader(path)
+        pages = len(reader.pages)
+        sample = [len((reader.pages[i].extract_text() or "").strip()) for i in range(min(3, pages))]
+    except Exception:  # noqa: BLE001 - unreadable here means "let MinerU OCR it"
+        return 0, False
+    digital = bool(sample) and sum(n > TEXT_LAYER_MIN_CHARS for n in sample) >= (len(sample) + 1) // 2
+    return pages, digital
+
+
+def choose_tier(path: str) -> tuple[str, int]:
+    """(MinerU tier, PDF page count or 0): flash for digital PDFs and Office/HTML files,
+    the default (basic) for scanned PDFs and images."""
+    ext = path.rsplit(".", 1)[-1].lower() if "." in path else ""
+    if ext == "pdf":
+        pages, digital = pdf_info(path)
+        return (FAST_TIER if digital else MINERU_TIER), pages
+    if ext in OFFICE_EXTENSIONS:
+        return FAST_TIER, 0
+    return MINERU_TIER, 0
+
+
+def parse_file(path: str, tier: str = MINERU_TIER) -> dict[str, Any]:
     """Raw `mineru parse --json` output for one file (all pages)."""
-    args = ["parse", path, "--tier", MINERU_TIER, "--json", "--wait", str(PARSE_WAIT_SECONDS), "--limit", "50000000"]
+    args = ["parse", path, "--tier", tier, "--json", "--wait", str(PARSE_WAIT_SECONDS), "--limit", "50000000"]
     if path.lower().endswith(".pdf"):
         args += ["--pages", "all"]  # MinerU rejects --pages for non-PDF files
     proc = run_mineru(args, timeout=PARSE_WAIT_SECONDS + 60)
@@ -207,21 +245,39 @@ def _parse_job(ws: str, file_id: str) -> None:
     record = next((r for r in storage.list_file_records(ws) if r["id"] == file_id), None)
     if record is None:
         return
+    started = time.monotonic()
     storage.update_file(ws, file_id, status="parsing", progress_label="Reading pages…", error=None)
     try:
         if record["name"].rsplit(".", 1)[-1].lower() in TEXT_EXTENSIONS:
+            tier = "text"
             blocks, pages = text_file_blocks(record["path"], file_id, record["name"])
         else:
-            raw = parse_file(record["path"])
+            tier, page_count = choose_tier(record["path"])
+            # MinerU's CLI doesn't report per-page progress, so show the page count from pypdf.
+            label = f"Reading {page_count} pages…" if page_count > 1 else "Reading pages…"
+            storage.update_file(ws, file_id, tier=tier, progress_label=label)
+            log.info("parsing %s (%s) on MinerU tier %s, %d pages", record["name"], file_id, tier, page_count)
+            try:
+                raw = parse_file(record["path"], tier)
+            except ParseError:
+                if tier == MINERU_TIER:
+                    raise
+                # Fast path failed: fall back to the old behavior (the default tier).
+                log.warning("tier %s failed for %s; retrying on %s", tier, record["name"], MINERU_TIER)
+                tier = MINERU_TIER
+                storage.update_file(ws, file_id, tier=tier)
+                raw = parse_file(record["path"], tier)
             (storage.parsed_dir(ws) / f"{file_id}.json").write_text(json.dumps(raw, ensure_ascii=False), encoding="utf-8")
             blocks, pages = extract_blocks(raw, file_id, record["name"])
         if not blocks:
             raise ParseError("No readable text found. Try a clearer copy.")
         storage.replace_file_blocks(ws, file_id, blocks)
         search.rebuild(ws)
-        storage.update_file(ws, file_id, status="ready", pages=pages, progress_label=None)
-        # Vectors for hybrid search; on failure the file stays ready and asks/startup retry.
-        search.index_vectors(ws)
+        seconds = round(time.monotonic() - started, 1)
+        storage.update_file(ws, file_id, status="ready", pages=pages, progress_label=None, tier=tier, parse_seconds=seconds)
+        log.info("ready: %s on tier %s, %d pages, %d blocks, %.1fs", record["name"], tier, pages, len(blocks), seconds)
+        # Vectors for hybrid search, off the parse thread; on failure asks/startup retry.
+        _embed_executor.submit(search.index_vectors, ws)
     except Exception as e:  # noqa: BLE001 - any failure marks the file failed, never crashes the worker
         message = str(e) if isinstance(e, ParseError) else f"Couldn't read this file ({type(e).__name__})."
         storage.update_file(ws, file_id, status="failed", progress_label=None, error=message)
