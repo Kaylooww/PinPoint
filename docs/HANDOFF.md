@@ -1,6 +1,6 @@
 # PinPoint — Handoff
 
-Last updated: Thursday 13:50, after Phase D item 18a (workspaces grid).
+Last updated: Thursday 14:06, warm_cache.py ready for step 20. Branch: demo-prep.
 
 ## Done (and tested)
 - Phase A 1–6: backend core on MinerU **basic** tier; both samples parse to ready; crops; API end-to-end.
@@ -13,10 +13,14 @@ Last updated: Thursday 13:50, after Phase D item 18a (workspaces grid).
 - Phase D 17: knowledge stats strip at the top of the Files tab (GET /knowledge), refreshed when files change. Browser-checked against the API.
 
 ## In progress
+- Phase E (started early; 18b Landing/Sign in comes as a patch from another session — don't touch LandingPage.tsx, SignInPage.tsx, or the routes in App.tsx).
+- Full demo run (light + dark) against the real backend: all steps pass after two fixes — (1) crops were unreadable (wide paragraph strips shrank to ~25 px): cards now fit the crop's height and show the start of the passage; the panel is 560 px wide and very wide strips keep a 112 px height and scroll sideways; (2) the DEMO.md follow-up "Who is the renter?" returned Not found ("renter" is in nearly every clause) → script now uses "Who is the renter named in that agreement?".
+- Step 22 drafted: docs/DEMO.md (start order, checklist, click-by-click script with questions verified on the samples, fallback plan). Swap in docs/DEMO_QUESTIONS.md when it exists.
+- Step 19 done: `backend/scripts/reset_demo.py` rebuilds Reyes & Partners and waits until all files are ready. backend/demo_files/ doesn't exist yet, so it uses backend/samples/ (2 files, 3 pages).
 - Phase D frontend halves, in order 13 → 18.
 
 ## Exact next step
-- 18b: static Sign in (Figma 8:1110) and Landing (8:845): pricing buttons inert, Get started → /signin, Continue → /workspaces; then point "/" to Landing. Needs Figma reconnected (claude.ai connector is down) or build from DESIGN.md.
+- Step 20 once docs/DEMO_QUESTIONS.md exists: `cd backend && .venv/bin/python scripts/warm_cache.py` (asks every line ending in "?", reports status/citations/crops; the cache is in memory, so run it after the final backend start), then re-check each answer. Put the final demo files, with readable names, in backend/demo_files/ and rerun scripts/reset_demo.py first.
 
 ## How to run
 ```sh
@@ -24,9 +28,14 @@ mineru server start          # basic tier, managed; check: mineru server status 
 cd backend && source .venv/bin/activate && uvicorn app.main:app --reload --port 8000
 cd frontend && npm run dev   # http://localhost:5173
 ```
+Reset the demo workspace (servers running): `cd backend && .venv/bin/python scripts/reset_demo.py`
+Warm the answer cache (after the final backend start): `cd backend && .venv/bin/python scripts/warm_cache.py`
+
 Tests (throwaway data dir): `cd backend && .venv/bin/python tests/test_core_fixture.py` and `.venv/bin/python tests/test_folders.py`. Add `LLM_PROVIDER=none` to test extractive mode.
 
 ## Known issues
+- A git checkout/pull in this folder while `npm run dev` runs can stall Vite's Tailwind step (pages lose all styling). Fix: restart `npm run dev`. Happened once at 13:54.
+- Bare follow-ups with only a very common word ("Who is the renter?") can retrieve the wrong passages and return Not found.
 - Figma MCP (claude.ai connector) disconnected at 13:35; new screens reuse existing components until it is re-authenticated.
 - Browser walkthrough driver (CDP, no deps) lives in the agent scratchpad, not the repo.
 - Start `mineru server` from a stable directory: its managed parse service writes `.mineru-service.lock` and `blobs/` into the current directory (both git-ignored).

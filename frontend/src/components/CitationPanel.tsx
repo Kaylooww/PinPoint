@@ -38,7 +38,7 @@ export function CitationPanel({ citation, total, onClose }: CitationPanelProps) 
     <aside
       role="dialog"
       aria-label={`Source ${citation.number} of ${total}`}
-      className="fixed inset-y-0 right-0 z-30 flex w-[440px] flex-col gap-[18px] overflow-y-auto border-l border-border bg-surface p-6 shadow-panel"
+      className="fixed inset-y-0 right-0 z-30 flex w-[560px] flex-col gap-[18px] overflow-y-auto border-l border-border bg-surface p-6 shadow-panel"
     >
       <header className="flex items-center justify-between">
         <h2 className="text-h3 text-text">
