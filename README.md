@@ -66,3 +66,24 @@ cd frontend && npm run dev    # http://localhost:5173
 ```
 
 `GET http://localhost:8000/api/health` reports the LLM provider and MinerU server status. Restart the backend after editing `backend/.env`.
+
+## Business plan
+
+*Problem.* Law offices, accounting firms, real estate agencies, and insurance companies handle stacks of client documents every day: scanned contracts, phone photos of receipts, PDFs, and spreadsheets. Finding one fact means opening file after file, and general AI tools can't be trusted with confidential files or blurry scans, and often guess when they don't know.
+
+*Target users.* Staff at small and mid-sized document-heavy firms: lawyers and paralegals, bookkeepers and accountants, real estate agents, insurance staff, and the virtual assistants who support them. The firm pays, per team.
+
+*Solution and value.* PinPoint lets you ask a plain-language question across all of a client's files at once. It reads scans and photos, finds the answer, and shows a cropped image of exactly where it came from. If the answer isn't in the files, it says so instead of guessing. Files are parsed on the firm's own computer. The result: minutes of searching become seconds, with proof attached.
+
+*Making money.* A monthly subscription per firm (SaaS):
+- *Starter* for solo professionals: 1 user, a few client workspaces.
+- *Team* for small firms: up to 5 users, unlimited workspaces.
+- *Firm* for larger offices: custom pricing, including on-premise installation for firms that can't use the cloud.
+A 14-day free trial lets firms try it on their own files before paying.
+
+*Competition.* General AI tools (ChatGPT, NotebookLM, Adobe Acrobat AI) work well on clean files you're allowed to upload to a big tech cloud. Enterprise platforms like Hebbia serve large finance and legal firms at enterprise prices. PinPoint is built for the firms in between: messy paperwork, strict confidentiality, and no enterprise budget. Its edge is visual proof for every answer, local parsing, and honest "not found" answers.
+
+*Next steps (first 1–3 months).*
+1. Pilot with 3–5 local firms in Cebu (law, accounting, real estate) and measure time saved per question.
+2. Add automatic folder sync, team accounts with permissions, and contract version comparison.
+3. Launch the paid Starter and Team plans, priced from the pilot feedback.
