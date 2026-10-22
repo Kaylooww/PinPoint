@@ -25,7 +25,7 @@
 - [ ] History, saved answers, follow-up threads (backend done; UI pending)
 - [x] Notes (indexed and citable)
 - [x] Browser folder upload
-- [ ] Connected local folders with rescan and disconnect (backend done; UI pending)
+- [x] Connected local folders with rescan and disconnect
 - [ ] Knowledge stats (backend done; UI pending)
 ## Demo
 - [ ] Load the demo workspace, rehearse questions, record a backup video

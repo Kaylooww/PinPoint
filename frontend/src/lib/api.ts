@@ -1,5 +1,5 @@
 import * as mock from '../mocks/server'
-import type { AskResult, CreateWorkspaceRequest, FileItem, Note, Workspace } from './types'
+import type { AskResult, CreateWorkspaceRequest, FileItem, Folder, Note, Workspace } from './types'
 
 export const USE_MOCKS = import.meta.env.VITE_USE_MOCKS === 'true'
 const API_BASE = (import.meta.env.VITE_API_BASE ?? 'http://localhost:8000').replace(/\/$/, '')
@@ -84,5 +84,21 @@ export const api = {
   deleteNote: async (ws: string, noteId: string): Promise<void> => {
     if (USE_MOCKS) return mock.deleteNote(ws, noteId)
     await request(`/api/workspaces/${encodeURIComponent(ws)}/notes/${encodeURIComponent(noteId)}`, { method: 'DELETE' })
+  },
+
+  listFolders: (ws: string): Promise<Folder[]> =>
+    USE_MOCKS ? mock.listFolders(ws) : request(`/api/workspaces/${encodeURIComponent(ws)}/folders`),
+
+  connectFolder: (ws: string, path: string): Promise<Folder> =>
+    USE_MOCKS ? mock.connectFolder(ws, path) : request(`/api/workspaces/${encodeURIComponent(ws)}/folders`, json('POST', { path })),
+
+  rescanFolder: (ws: string, folderId: string): Promise<Folder> =>
+    USE_MOCKS
+      ? mock.rescanFolder(ws, folderId)
+      : request(`/api/workspaces/${encodeURIComponent(ws)}/folders/${encodeURIComponent(folderId)}/rescan`, { method: 'POST' }),
+
+  disconnectFolder: async (ws: string, folderId: string): Promise<void> => {
+    if (USE_MOCKS) return mock.disconnectFolder(ws, folderId)
+    await request(`/api/workspaces/${encodeURIComponent(ws)}/folders/${encodeURIComponent(folderId)}`, { method: 'DELETE' })
   },
 }

@@ -1,6 +1,6 @@
-import { useId, type InputHTMLAttributes } from 'react'
+import { useId, type ComponentProps } from 'react'
 
-type FieldProps = InputHTMLAttributes<HTMLInputElement> & { label: string }
+type FieldProps = ComponentProps<'input'> & { label: string }
 
 // Figma "Field" (3:194): label above a bordered input.
 export function Field({ label, className = '', id, ...rest }: FieldProps) {

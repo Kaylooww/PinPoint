@@ -1,5 +1,5 @@
 // In-memory mock backend. Same shapes as the real API (src/lib/types.ts).
-import type { AskResponse, AskResult, CreateWorkspaceRequest, FileItem, FileType, Note, Workspace } from '../lib/types'
+import type { AskResponse, AskResult, CreateWorkspaceRequest, FileItem, FileType, Folder, Note, Workspace } from '../lib/types'
 import * as data from './data'
 
 const state = {
@@ -8,6 +8,7 @@ const state = {
   // Polls seen per file while queued/parsing; drives the fake progress.
   ticks: {} as Record<string, number>,
   notes: { 'reyes-partners': structuredClone(data.reyesNotes) } as Record<string, Note[]>,
+  folders: {} as Record<string, Folder[]>,
 }
 
 export function delay(ms = 300): Promise<void> {
@@ -172,4 +173,58 @@ export async function addNote(ws: string, text: string): Promise<Note> {
 export async function deleteNote(ws: string, noteId: string): Promise<void> {
   await delay(200)
   state.notes[ws] = (state.notes[ws] ?? []).filter((n) => n.id !== noteId)
+}
+
+/** A connected folder finishes scanning on the next poll and brings in three files. */
+export async function listFolders(ws: string): Promise<Folder[]> {
+  await delay(200)
+  findWorkspace(ws)
+  for (const folder of state.folders[ws] ?? []) {
+    if (folder.status !== 'scanning') continue
+    const names = ['Engagement_Letter.pdf', 'Hearing_Notice.jpg', 'Billing_2026.xlsx']
+    if (!filesOf(ws).some((f) => f.source_path?.startsWith(folder.path))) {
+      filesOf(ws).unshift(
+        ...names.map((name): FileItem => ({
+          id: `fd-${crypto.randomUUID().slice(0, 8)}`,
+          name,
+          type: TYPES[name.split('.').pop()!.toLowerCase()] ?? 'other',
+          pages: 0,
+          size_bytes: 400 * 1024,
+          status: 'queued',
+          source: 'folder',
+          source_path: `${folder.path}/${name}`,
+        })),
+      )
+      syncCount(ws)
+    }
+    folder.status = 'ready'
+    folder.file_count = names.length
+    folder.last_scanned_at = new Date().toISOString()
+  }
+  return structuredClone(state.folders[ws] ?? [])
+}
+
+export async function connectFolder(ws: string, path: string): Promise<Folder> {
+  await delay(400)
+  findWorkspace(ws)
+  if (!path.startsWith('/')) throw new MockError('Use a full folder path, for example /Users/you/Documents/Client.')
+  const folder: Folder = { id: crypto.randomUUID().slice(0, 12), path, file_count: 0, status: 'scanning', last_scanned_at: null }
+  ;(state.folders[ws] ??= []).push(folder)
+  return structuredClone(folder)
+}
+
+export async function rescanFolder(ws: string, folderId: string): Promise<Folder> {
+  await delay(300)
+  const folder = (state.folders[ws] ?? []).find((f) => f.id === folderId)
+  if (!folder) throw new MockError('Folder not found')
+  folder.status = 'scanning'
+  return structuredClone(folder)
+}
+
+export async function disconnectFolder(ws: string, folderId: string): Promise<void> {
+  await delay(300)
+  const folder = (state.folders[ws] ?? []).find((f) => f.id === folderId)
+  state.folders[ws] = (state.folders[ws] ?? []).filter((f) => f.id !== folderId)
+  if (folder) state.files[ws] = filesOf(ws).filter((f) => !f.source_path?.startsWith(folder.path))
+  syncCount(ws)
 }

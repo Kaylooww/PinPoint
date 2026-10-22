@@ -1,11 +1,13 @@
-import { AlertTriangle, ChevronDown, FileUp, FolderUp, Upload } from 'lucide-react'
+import { AlertTriangle, ChevronDown, FileUp, FolderInput, FolderUp, Upload } from 'lucide-react'
 import { useCallback, useEffect, useRef, useState, type DragEvent } from 'react'
 import { useParams } from 'react-router-dom'
 import { Button } from '../components/Button'
+import { ConnectedFolders } from '../components/ConnectedFolders'
+import { ConnectFolderDialog } from '../components/ConnectFolderDialog'
 import { FileRow } from '../components/FileRow'
 import { api } from '../lib/api'
 import { ACCEPT, canPickDirectory, filterFolderInput, isSupported, pickDirectoryFiles } from '../lib/folders'
-import type { FileItem } from '../lib/types'
+import type { FileItem, Folder } from '../lib/types'
 import { useWorkspaceOutlet } from '../lib/workspaceOutlet'
 import { useWorkspaces } from '../lib/workspaces'
 
@@ -18,6 +20,8 @@ export function FilesPage() {
   const { setActions } = useWorkspaceOutlet()
   const { refresh: refreshWorkspaces } = useWorkspaces()
   const [files, setFiles] = useState<FileItem[] | null>(null)
+  const [folders, setFolders] = useState<Folder[]>([])
+  const [connecting, setConnecting] = useState(false)
   const [loadError, setLoadError] = useState<string | null>(null)
   const [uploadMessage, setUploadMessage] = useState<string | null>(null)
   const [uploadError, setUploadError] = useState<string | null>(null)
@@ -25,6 +29,15 @@ export function FilesPage() {
   const fileInput = useRef<HTMLInputElement>(null)
   const folderInput = useRef<HTMLInputElement>(null)
   const lastSignature = useRef('')
+
+  const loadFolders = useCallback(
+    () =>
+      api.listFolders(id).then(
+        (list) => setFolders(list),
+        () => undefined, // The file list shows load errors; folders just stay as they were.
+      ),
+    [id],
+  )
 
   const load = useCallback(
     () =>
@@ -46,14 +59,44 @@ export function FilesPage() {
 
   useEffect(() => {
     void load()
-  }, [load])
+    void loadFolders()
+  }, [load, loadFolders])
 
-  const busy = files?.some((f) => f.status === 'queued' || f.status === 'parsing') ?? false
+  const busy =
+    (files?.some((f) => f.status === 'queued' || f.status === 'parsing') ?? false) ||
+    folders.some((f) => f.status === 'scanning')
   useEffect(() => {
     if (!busy) return
-    const timer = setInterval(() => void load(), POLL_MS)
+    const timer = setInterval(() => {
+      void loadFolders()
+      void load()
+    }, POLL_MS)
     return () => clearInterval(timer)
-  }, [busy, load])
+  }, [busy, load, loadFolders])
+
+  const connectFolder = async (path: string) => {
+    const folder = await api.connectFolder(id, path)
+    setFolders((list) => [...list, folder])
+  }
+
+  const rescan = async (folder: Folder) => {
+    try {
+      const updated = await api.rescanFolder(id, folder.id)
+      setFolders((list) => list.map((f) => (f.id === folder.id ? updated : f)))
+    } catch (e) {
+      setUploadError(e instanceof Error ? e.message : 'Rescan failed.')
+    }
+  }
+
+  const disconnect = async (folder: Folder) => {
+    try {
+      await api.disconnectFolder(id, folder.id)
+      setFolders((list) => list.filter((f) => f.id !== folder.id))
+      await load()
+    } catch (e) {
+      setUploadError(e instanceof Error ? e.message : 'Disconnect failed.')
+    }
+  }
 
   const upload = useCallback(
     async (picked: File[]) => {
@@ -95,7 +138,13 @@ export function FilesPage() {
   }, [upload])
 
   useEffect(() => {
-    setActions(<AddFilesMenu onFiles={() => fileInput.current?.click()} onFolder={() => void uploadFolder()} />)
+    setActions(
+      <AddFilesMenu
+        onFiles={() => fileInput.current?.click()}
+        onFolder={() => void uploadFolder()}
+        onConnect={() => setConnecting(true)}
+      />,
+    )
     return () => setActions(null)
   }, [setActions, uploadFolder])
 
@@ -181,6 +230,8 @@ export function FilesPage() {
           ))}
         </div>
       ) : (
+        <>
+        <ConnectedFolders folders={folders} onRescan={(f) => void rescan(f)} onDisconnect={(f) => void disconnect(f)} />
         <section className="flex flex-col gap-5">
           <div className="flex items-center justify-between">
             <h2 className="text-body font-semibold text-text">
@@ -198,12 +249,15 @@ export function FilesPage() {
             </div>
           )}
         </section>
+        </>
       )}
+
+      {connecting && <ConnectFolderDialog onConnect={connectFolder} onClose={() => setConnecting(false)} />}
     </div>
   )
 }
 
-function AddFilesMenu({ onFiles, onFolder }: { onFiles: () => void; onFolder: () => void }) {
+function AddFilesMenu({ onFiles, onFolder, onConnect }: { onFiles: () => void; onFolder: () => void; onConnect: () => void }) {
   const [open, setOpen] = useState(false)
   const ref = useRef<HTMLDivElement>(null)
 
@@ -238,6 +292,7 @@ function AddFilesMenu({ onFiles, onFolder }: { onFiles: () => void; onFolder: ()
         >
           <MenuItem Icon={FileUp} label="Upload files" onClick={choose(onFiles)} />
           <MenuItem Icon={FolderUp} label="Upload a folder" onClick={choose(onFolder)} />
+          <MenuItem Icon={FolderInput} label="Connect a local folder" onClick={choose(onConnect)} />
         </div>
       )}
     </div>

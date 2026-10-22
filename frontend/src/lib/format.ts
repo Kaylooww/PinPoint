@@ -33,3 +33,12 @@ export function fileMeta(file: FileItem): string {
   if (file.source === 'folder' && file.source_path) parts.push(file.source_path)
   return parts.join(' · ')
 }
+
+/** "just now", "5 min ago", "3 h ago", then dayLabel(). */
+export function timeAgo(iso: string): string {
+  const minutes = Math.round((Date.now() - new Date(iso).getTime()) / 60_000)
+  if (minutes < 1) return 'just now'
+  if (minutes < 60) return `${minutes} min ago`
+  if (minutes < 24 * 60) return `${Math.round(minutes / 60)} h ago`
+  return dayLabel(iso)
+}
