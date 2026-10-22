@@ -22,7 +22,7 @@
 - [x] Switch off mocks; connect to the backend
 ## Memory and local files
 - [x] Persistence: rebuild indexes on startup, resume interrupted parsing
-- [ ] History, saved answers, follow-up threads (backend done; UI pending)
+- [x] History, saved answers, follow-up threads
 - [x] Notes (indexed and citable)
 - [x] Browser folder upload
 - [x] Connected local folders with rescan and disconnect

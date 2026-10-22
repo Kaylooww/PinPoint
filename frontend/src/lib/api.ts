@@ -1,5 +1,15 @@
 import * as mock from '../mocks/server'
-import type { AskResult, CreateWorkspaceRequest, FileItem, Folder, Note, Workspace } from './types'
+import type {
+  AskResult,
+  CreateWorkspaceRequest,
+  FileItem,
+  Folder,
+  HistoryDetail,
+  HistoryItem,
+  KnowledgeStats,
+  Note,
+  Workspace,
+} from './types'
 
 export const USE_MOCKS = import.meta.env.VITE_USE_MOCKS === 'true'
 const API_BASE = (import.meta.env.VITE_API_BASE ?? 'http://localhost:8000').replace(/\/$/, '')
@@ -101,4 +111,20 @@ export const api = {
     if (USE_MOCKS) return mock.disconnectFolder(ws, folderId)
     await request(`/api/workspaces/${encodeURIComponent(ws)}/folders/${encodeURIComponent(folderId)}`, { method: 'DELETE' })
   },
+
+  listHistory: (ws: string): Promise<HistoryItem[]> =>
+    USE_MOCKS ? mock.listHistory(ws) : request(`/api/workspaces/${encodeURIComponent(ws)}/history`),
+
+  getHistory: (ws: string, historyId: string): Promise<HistoryDetail> =>
+    USE_MOCKS
+      ? mock.getHistory(ws, historyId)
+      : request(`/api/workspaces/${encodeURIComponent(ws)}/history/${encodeURIComponent(historyId)}`),
+
+  setSaved: (ws: string, historyId: string, saved: boolean): Promise<HistoryItem> =>
+    USE_MOCKS
+      ? mock.setSaved(ws, historyId, saved)
+      : request(`/api/workspaces/${encodeURIComponent(ws)}/history/${encodeURIComponent(historyId)}`, json('PATCH', { saved })),
+
+  knowledge: (ws: string): Promise<KnowledgeStats> =>
+    USE_MOCKS ? mock.knowledge(ws) : request(`/api/workspaces/${encodeURIComponent(ws)}/knowledge`),
 }

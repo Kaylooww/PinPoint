@@ -1,5 +1,5 @@
 // In-memory mock backend. Same shapes as the real API (src/lib/types.ts).
-import type { AskResponse, AskResult, CreateWorkspaceRequest, FileItem, FileType, Folder, Note, Workspace } from '../lib/types'
+import type { AskResponse, AskResult, CreateWorkspaceRequest, FileItem, FileType, Folder, HistoryDetail, HistoryItem, KnowledgeStats, Note, Workspace } from '../lib/types'
 import * as data from './data'
 
 const state = {
@@ -9,6 +9,7 @@ const state = {
   ticks: {} as Record<string, number>,
   notes: { 'reyes-partners': structuredClone(data.reyesNotes) } as Record<string, Note[]>,
   folders: {} as Record<string, Folder[]>,
+  history: {} as Record<string, (HistoryDetail & { id: string })[]>,
 }
 
 export function delay(ms = 300): Promise<void> {
@@ -121,7 +122,11 @@ export async function uploadFiles(ws: string, files: File[]): Promise<FileItem[]
 
 export async function ask(ws: string, question: string, threadId?: string): Promise<AskResult> {
   const response = await answer(ws, question)
-  return { ...response, thread_id: threadId ?? crypto.randomUUID().slice(0, 12), history_id: crypto.randomUUID().slice(0, 12) }
+  const history = (state.history[ws] ??= [])
+  const thread_id = threadId && history.some((h) => h.thread_id === threadId) ? threadId : crypto.randomUUID().slice(0, 12)
+  const id = crypto.randomUUID().slice(0, 12)
+  history.push({ id, question, response, thread_id, created_at: new Date().toISOString(), saved: false })
+  return { ...structuredClone(response), thread_id, history_id: id }
 }
 
 async function answer(ws: string, question: string): Promise<AskResponse> {
@@ -227,4 +232,54 @@ export async function disconnectFolder(ws: string, folderId: string): Promise<vo
   state.folders[ws] = (state.folders[ws] ?? []).filter((f) => f.id !== folderId)
   if (folder) state.files[ws] = filesOf(ws).filter((f) => !f.source_path?.startsWith(folder.path))
   syncCount(ws)
+}
+
+function historyItem(h: HistoryDetail & { id: string }): HistoryItem {
+  const preview = h.response.answer.map((a) => a.text).join(' ') || h.response.reason || ''
+  return {
+    id: h.id,
+    question: h.question,
+    status: h.response.status,
+    answer_preview: preview.slice(0, 160),
+    thread_id: h.thread_id,
+    created_at: h.created_at,
+    saved: h.saved,
+  }
+}
+
+export async function listHistory(ws: string): Promise<HistoryItem[]> {
+  await delay(200)
+  return (state.history[ws] ?? []).map(historyItem).reverse()
+}
+
+export async function getHistory(ws: string, historyId: string): Promise<HistoryDetail> {
+  await delay(200)
+  const h = (state.history[ws] ?? []).find((x) => x.id === historyId)
+  if (!h) throw new MockError('Not found in history')
+  const { id: _id, ...detail } = structuredClone(h)
+  return detail
+}
+
+export async function setSaved(ws: string, historyId: string, saved: boolean): Promise<HistoryItem> {
+  await delay(200)
+  const h = (state.history[ws] ?? []).find((x) => x.id === historyId)
+  if (!h) throw new MockError('Not found in history')
+  h.saved = saved
+  return historyItem(h)
+}
+
+export async function knowledge(ws: string): Promise<KnowledgeStats> {
+  await delay(200)
+  const files = filesOf(ws)
+  const ready = files.filter((f) => f.status === 'ready')
+  const pages = ready.reduce((n, f) => n + f.pages, 0)
+  return {
+    files: files.length,
+    ready_files: ready.length,
+    pages,
+    passages: pages * 8,
+    notes: (state.notes[ws] ?? []).length,
+    folders: (state.folders[ws] ?? []).length,
+    last_indexed_at: new Date(Date.now() - 2 * 60_000).toISOString(),
+  }
 }

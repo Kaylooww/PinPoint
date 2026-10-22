@@ -1,4 +1,4 @@
-import { Check, Copy, CornerDownRight } from 'lucide-react'
+import { Bookmark, BookmarkCheck, Check, Copy, CornerDownRight } from 'lucide-react'
 import { Fragment, useState } from 'react'
 import type { AskResponse, Citation } from '../lib/types'
 import { Button } from './Button'
@@ -8,13 +8,15 @@ type AnswerCardProps = {
   response: AskResponse
   activeCitationId?: string | null
   onOpenCitation: (citation: Citation) => void
-  onFollowUp: () => void
+  onFollowUp?: () => void
+  saved?: boolean
+  onToggleSave?: () => void
 }
 
 export const EXTRACTIVE_LABEL = 'Showing matching passages.'
 
 // Figma "Answer Card" (4:156): answer text with inline numbered markers, sources, actions.
-export function AnswerCard({ response, activeCitationId, onOpenCitation, onFollowUp }: AnswerCardProps) {
+export function AnswerCard({ response, activeCitationId, onOpenCitation, onFollowUp, saved = false, onToggleSave }: AnswerCardProps) {
   const [copied, setCopied] = useState(false)
   const byId = new Map(response.citations.map((c) => [c.id, c]))
   const fileCount = new Set(response.citations.filter((c) => c.kind === 'file').map((c) => c.file_id)).size
@@ -83,9 +85,16 @@ export function AnswerCard({ response, activeCitationId, onOpenCitation, onFollo
         <Button variant="ghost" Icon={copied ? Check : Copy} onClick={copy}>
           {copied ? 'Copied' : 'Copy answer'}
         </Button>
-        <Button variant="ghost" Icon={CornerDownRight} onClick={onFollowUp}>
-          Ask a follow-up
-        </Button>
+        {onToggleSave && (
+          <Button variant="ghost" Icon={saved ? BookmarkCheck : Bookmark} onClick={onToggleSave} aria-pressed={saved}>
+            {saved ? 'Saved' : 'Save'}
+          </Button>
+        )}
+        {onFollowUp && (
+          <Button variant="ghost" Icon={CornerDownRight} onClick={onFollowUp}>
+            Ask a follow-up
+          </Button>
+        )}
       </div>
     </article>
   )
