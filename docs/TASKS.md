@@ -16,7 +16,7 @@
 - [x] Components from Figma
 - [x] Ask and citation panel (mocks)
 - [x] Files and upload (mocks)
-- [ ] Workspaces
+- [x] Workspaces
 - [ ] States
 - [ ] Settings (theme), sign-in (static), landing (static)
 - [x] Switch off mocks; connect to the backend

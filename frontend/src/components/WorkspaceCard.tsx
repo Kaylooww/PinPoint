@@ -1,6 +1,6 @@
 import { Briefcase, Calculator, Home, Scale, Umbrella, type LucideIcon } from 'lucide-react'
 import { Link } from 'react-router-dom'
-import { dayLabel } from '../lib/format'
+import { timeAgo } from '../lib/format'
 import type { Workspace } from '../lib/types'
 
 const INDUSTRY_ICONS: [string[], LucideIcon][] = [
@@ -32,7 +32,7 @@ export function WorkspaceCard({ workspace }: { workspace: Workspace }) {
       <div className="flex flex-col gap-1">
         <p className="text-h3 text-text">{workspace.name}</p>
         <p className="text-small text-muted">
-          {workspace.file_count} file{workspace.file_count === 1 ? '' : 's'} · Updated {dayLabel(workspace.updated_at).toLowerCase()}
+          {workspace.file_count} file{workspace.file_count === 1 ? '' : 's'} · Updated {timeAgo(workspace.updated_at)}
         </p>
       </div>
     </Link>
