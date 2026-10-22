@@ -460,3 +460,55 @@ def knowledge_stats(ws: str) -> dict[str, Any]:
         "folders": len(list_folder_records(ws)),
         "last_indexed_at": _mtime_iso([ws_dir(ws) / "blocks.json", *notes_dir(ws).glob("*.md")]),
     }
+
+
+# Opening the original document (GET .../files/{id}/raw and /text)
+
+FILE_ID_RE = re.compile(r"^[A-Za-z0-9-]{1,64}$")
+
+
+def _inside(path: Path, root: Path) -> bool:
+    return path == root or root in path.parents
+
+
+def original_path(ws: str, file_id: str) -> Path | None:
+    """The original file on disk for a registered file id, or None.
+
+    Uploads must resolve inside this workspace's uploads/; folder files are served only
+    while their source_path is still inside a connected folder. Symlinks are never followed.
+    """
+    if not FILE_ID_RE.match(file_id):
+        return None
+    record = next((r for r in list_file_records(ws) if r["id"] == file_id), None)
+    if record is None or not record.get("path"):
+        return None
+    raw = Path(record["path"])
+    if raw.is_symlink():
+        return None
+    path = raw.resolve()
+    if record.get("source") == "folder":
+        roots = [Path(f["path"]).resolve() for f in list_folder_records(ws) if f["id"] == record.get("folder_id")]
+        allowed = any(_inside(path, root) for root in roots)
+    else:
+        allowed = _inside(path, uploads_dir(ws).resolve())
+    return path if allowed and path.is_file() else None
+
+
+def file_text(ws: str, file_id: str) -> dict[str, Any] | None:
+    """{id, name, type, pages: [{page, blocks: [{text, table?}]}]} from the parsed blocks."""
+    record = next((r for r in list_file_records(ws) if r["id"] == file_id), None) if FILE_ID_RE.match(file_id) else None
+    if record is None:
+        return None
+    pages: dict[int, list[dict[str, Any]]] = {}
+    for block in load_blocks(ws):
+        if block["file_id"] == file_id:
+            item = {"text": block["text"]}
+            if block.get("table"):
+                item["table"] = block["table"]
+            pages.setdefault(block["page"], []).append(item)
+    return {
+        "id": record["id"],
+        "name": record["name"],
+        "type": record["type"],
+        "pages": [{"page": n, "blocks": pages[n]} for n in sorted(pages)],
+    }

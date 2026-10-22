@@ -3,6 +3,7 @@ import type {
   AskResult,
   CreateWorkspaceRequest,
   FileItem,
+  FileText,
   Folder,
   HistoryDetail,
   HistoryItem,
@@ -44,6 +45,11 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 
 function json(method: string, body: unknown): RequestInit {
   return { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }
+}
+
+/** URL of a file's original, for <iframe>/<img>/fetch. null in mock mode (no originals). */
+export function rawUrl(ws: string, fileId: string): string | null {
+  return USE_MOCKS ? null : `${API_BASE}/api/workspaces/${encodeURIComponent(ws)}/files/${encodeURIComponent(fileId)}/raw`
 }
 
 /** Absolute URL for a path returned by the API (crops), or a local mock asset. */
@@ -127,4 +133,9 @@ export const api = {
 
   knowledge: (ws: string): Promise<KnowledgeStats> =>
     USE_MOCKS ? mock.knowledge(ws) : request(`/api/workspaces/${encodeURIComponent(ws)}/knowledge`),
+
+  getFileText: (ws: string, fileId: string): Promise<FileText> =>
+    USE_MOCKS
+      ? mock.getFileText(ws, fileId)
+      : request(`/api/workspaces/${encodeURIComponent(ws)}/files/${encodeURIComponent(fileId)}/text`),
 }

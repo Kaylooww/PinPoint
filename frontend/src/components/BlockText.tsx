@@ -1,10 +1,8 @@
-import type { Citation } from '../lib/types'
-
-// A cited block's full text: a real table for table blocks, otherwise the text with its line breaks.
-export function BlockText({ citation }: { citation: Citation }) {
-  if (citation.table?.length) {
-    const [head, ...rows] = citation.table
-    const columns = Math.max(...citation.table.map((r) => r.length))
+// A parsed block's text: a real table for table blocks, otherwise the text with its line breaks.
+export function BlockText({ text, table }: { text: string; table?: string[][] }) {
+  if (table?.length) {
+    const [head, ...rows] = table
+    const columns = Math.max(...table.map((r) => r.length))
     const pad = (row: string[]) => [...row, ...Array<string>(columns - row.length).fill('')]
     return (
       <div className="overflow-x-auto rounded-control border border-border">
@@ -33,5 +31,5 @@ export function BlockText({ citation }: { citation: Citation }) {
       </div>
     )
   }
-  return <p className="text-small whitespace-pre-line text-text">{citation.text}</p>
+  return <p className="text-small whitespace-pre-line text-text">{text}</p>
 }

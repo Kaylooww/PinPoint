@@ -65,11 +65,14 @@ POST   /api/workspaces/{ws}/folders {"path"} → Folder
 POST   /api/workspaces/{ws}/folders/{id}/rescan → Folder
 DELETE /api/workspaces/{ws}/folders/{id} → {"ok": true}
 GET    /api/workspaces/{ws}/knowledge → KnowledgeStats
+GET    /api/workspaces/{ws}/files/{file_id}/raw → the original file, inline, with its media type. Only files registered in files.json, looked up by id (ids match [A-Za-z0-9-]+; no paths in the URL). Uploads must resolve inside the workspace's uploads/; folder files only while their source_path is inside their connected folder; symlinks refused. 404 otherwise.
+GET    /api/workspaces/{ws}/files/{file_id}/text → FileText (parsed text by page, for formats browsers can't render: docx, xlsx, pptx)
 
 HistoryItem: {id, question, status, answer_preview, thread_id, created_at, saved}
 Note: {id, text, created_at}
 Folder: {id, path, file_count, status: "scanning"|"ready"|"failed", last_scanned_at, error?}
 KnowledgeStats: {files, ready_files, pages, passages, notes, folders, last_indexed_at}
+FileText: {id, name, type, pages: {page, blocks: {text, table?}[]}[]}
 FileItem gains: source: "upload"|"folder", source_path?
 Citation gains: kind: "file"|"note". crop_url is null for notes and plain-text files.
 Citation.text is the block's full cleaned text with its line breaks (parser artifacts stripped: page markers, HTML comments, heading and emphasis marks). Citation.excerpt is the short supporting passage: the LLM's per-source span when it is a verbatim substring of the block (whitespace and case normalized; the excerpt is cut from the block, never the LLM's copy), otherwise the 1–3 lines or sentences with the most question and answer-term overlap. Citation.table (only for table blocks) is the block's rows of cells, for rendering as a real table.

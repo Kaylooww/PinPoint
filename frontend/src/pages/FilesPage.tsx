@@ -4,6 +4,7 @@ import { useParams } from 'react-router-dom'
 import { Button } from '../components/Button'
 import { ConnectedFolders } from '../components/ConnectedFolders'
 import { ConnectFolderDialog } from '../components/ConnectFolderDialog'
+import { DocumentViewer, type ViewerFile } from '../components/DocumentViewer'
 import { FileRow } from '../components/FileRow'
 import { api } from '../lib/api'
 import { ACCEPT, canPickDirectory, filterFolderInput, isSupported, pickDirectoryFiles } from '../lib/folders'
@@ -24,6 +25,7 @@ export function FilesPage() {
   const [folders, setFolders] = useState<Folder[]>([])
   const [stats, setStats] = useState<KnowledgeStats | null>(null)
   const [connecting, setConnecting] = useState(false)
+  const [viewing, setViewing] = useState<ViewerFile | null>(null)
   const [loadError, setLoadError] = useState<string | null>(null)
   const [uploadMessage, setUploadMessage] = useState<string | null>(null)
   const [uploadError, setUploadError] = useState<string | null>(null)
@@ -248,7 +250,7 @@ export function FilesPage() {
           ) : (
             <div className="flex flex-col gap-1.5">
               {files.map((file) => (
-                <FileRow key={file.id} file={file} />
+                <FileRow key={file.id} file={file} onOpen={(f) => setViewing({ id: f.id, name: f.name, type: f.type })} />
               ))}
             </div>
           )}
@@ -257,6 +259,7 @@ export function FilesPage() {
       )}
 
       {connecting && <ConnectFolderDialog onConnect={connectFolder} onClose={() => setConnecting(false)} />}
+      {viewing && <DocumentViewer ws={id} file={viewing} onClose={() => setViewing(null)} />}
     </div>
   )
 }

@@ -4,9 +4,10 @@ import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { AnswerCard } from '../components/AnswerCard'
 import { Button } from '../components/Button'
 import { CitationPanel } from '../components/CitationPanel'
+import { DocumentViewer, type ViewerFile } from '../components/DocumentViewer'
 import { SearchInput } from '../components/SearchInput'
 import { api } from '../lib/api'
-import { dayLabel, formatSeconds } from '../lib/format'
+import { dayLabel, fileTypeFromName, formatSeconds } from '../lib/format'
 import type { AskResponse, Citation, HistoryItem } from '../lib/types'
 import { useWorkspaceOutlet } from '../lib/workspaceOutlet'
 
@@ -35,6 +36,7 @@ export function AskPage() {
   const [loading, setLoading] = useState(false)
   const [open, setOpen] = useState<{ turn: number; citation: Citation } | null>(null)
   const [recent, setRecent] = useState<HistoryItem[]>([])
+  const [viewing, setViewing] = useState<ViewerFile | null>(null)
 
   useEffect(() => {
     setActions(
@@ -262,8 +264,10 @@ export function AskPage() {
           citation={open.citation}
           total={turns[open.turn].response!.citations.length}
           onClose={closePanel}
+          onOpenDocument={(c) => setViewing({ id: c.file_id, name: c.file_name, type: fileTypeFromName(c.file_name), page: c.page })}
         />
       )}
+      {viewing && <DocumentViewer ws={id} file={viewing} onClose={() => setViewing(null)} />}
     </div>
   )
 }

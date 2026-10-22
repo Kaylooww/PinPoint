@@ -1,4 +1,4 @@
-import { Check, ChevronDown, Copy, FileText, X, StickyNote } from 'lucide-react'
+import { BookOpen, Check, ChevronDown, Copy, FileText, X, StickyNote } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import type { Citation } from '../lib/types'
 import { BlockText } from './BlockText'
@@ -9,11 +9,12 @@ type CitationPanelProps = {
   citation: Citation
   total: number
   onClose: () => void
+  onOpenDocument?: (citation: Citation) => void
 }
 
 // Figma "Citation Panel" (7:922): larger proof image, file and page, extracted text, Copy text.
 // Render with key={citation.id} so per-source state (Copied) resets when switching sources.
-export function CitationPanel({ citation, total, onClose }: CitationPanelProps) {
+export function CitationPanel({ citation, total, onClose, onOpenDocument }: CitationPanelProps) {
   const [copied, setCopied] = useState(false)
   const [showFull, setShowFull] = useState(false)
   const closeRef = useRef<HTMLButtonElement>(null)
@@ -95,11 +96,16 @@ export function CitationPanel({ citation, total, onClose }: CitationPanelProps) 
             <ChevronDown size={16} strokeWidth={1.75} className={showFull ? 'rotate-180' : ''} />
             {showFull ? 'Hide full text' : 'Show full text'}
           </button>
-          {showFull && <BlockText citation={citation} />}
+          {showFull && <BlockText text={citation.text} table={citation.table} />}
         </div>
       )}
 
       <div className="flex gap-2">
+        {onOpenDocument && citation.kind === 'file' && (
+          <Button Icon={BookOpen} onClick={() => onOpenDocument(citation)}>
+            Open document
+          </Button>
+        )}
         <Button variant="secondary" Icon={copied ? Check : Copy} onClick={copy}>
           {copied ? 'Copied' : 'Copy text'}
         </Button>

@@ -1,4 +1,4 @@
-import type { FileItem } from './types'
+import type { FileItem, FileType } from './types'
 
 export function formatBytes(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`
@@ -41,4 +41,14 @@ export function timeAgo(iso: string): string {
   if (minutes < 60) return `${minutes} min ago`
   if (minutes < 24 * 60) return `${Math.round(minutes / 60)} h ago`
   return dayLabel(iso)
+}
+
+const TYPE_BY_EXTENSION: Record<string, FileType> = {
+  pdf: 'pdf', png: 'image', jpg: 'image', jpeg: 'image', webp: 'image', gif: 'image',
+  doc: 'doc', docx: 'doc', md: 'doc', txt: 'doc', xls: 'sheet', xlsx: 'sheet', csv: 'sheet', ppt: 'slides', pptx: 'slides',
+}
+
+/** File type from a file name, for citations (which carry only the name). */
+export function fileTypeFromName(name: string): FileType {
+  return TYPE_BY_EXTENSION[name.split('.').pop()?.toLowerCase() ?? ''] ?? 'other'
 }

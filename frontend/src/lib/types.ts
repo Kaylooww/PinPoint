@@ -120,3 +120,15 @@ export type CreateWorkspaceRequest = {
   name: string
   industry: string
 }
+
+export type FileTextBlock = {
+  text: string
+  table?: string[][]
+}
+
+export type FileText = {
+  id: string
+  name: string
+  type: FileType
+  pages: { page: number; blocks: FileTextBlock[] }[]
+}

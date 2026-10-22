@@ -1,5 +1,5 @@
 import type { LucideIcon } from 'lucide-react'
-import type { ButtonHTMLAttributes } from 'react'
+import type { ComponentProps } from 'react'
 
 type Variant = 'primary' | 'secondary' | 'ghost'
 
@@ -9,7 +9,7 @@ const VARIANTS: Record<Variant, string> = {
   ghost: 'text-muted hover:bg-surface-muted hover:text-text',
 }
 
-type ButtonProps = ButtonHTMLAttributes<HTMLButtonElement> & {
+type ButtonProps = ComponentProps<'button'> & {
   variant?: Variant
   Icon?: LucideIcon
 }
