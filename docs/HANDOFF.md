@@ -1,6 +1,6 @@
 # PinPoint — Handoff
 
-Last updated: Thursday 13:50, after Phase D item 18a (workspaces grid).
+Last updated: Thursday 13:58, Phase E step 19 (reset_demo.py). Branch: demo-prep (main has PRs #1 and #2 merged).
 
 ## Done (and tested)
 - Phase A 1–6: backend core on MinerU **basic** tier; both samples parse to ready; crops; API end-to-end.
@@ -13,10 +13,12 @@ Last updated: Thursday 13:50, after Phase D item 18a (workspaces grid).
 - Phase D 17: knowledge stats strip at the top of the Files tab (GET /knowledge), refreshed when files change. Browser-checked against the API.
 
 ## In progress
+- Phase E (started early; 18b Landing/Sign in comes as a patch from another session — don't touch LandingPage.tsx, SignInPage.tsx, or the routes in App.tsx).
+- Step 19 done: `backend/scripts/reset_demo.py` rebuilds Reyes & Partners and waits until all files are ready. backend/demo_files/ doesn't exist yet, so it uses backend/samples/ (2 files, 3 pages).
 - Phase D frontend halves, in order 13 → 18.
 
 ## Exact next step
-- 18b: static Sign in (Figma 8:1110) and Landing (8:845): pricing buttons inert, Get started → /signin, Continue → /workspaces; then point "/" to Landing. Needs Figma reconnected (claude.ai connector is down) or build from DESIGN.md.
+- Step 22: draft docs/DEMO.md. Then a full demo run (light + dark), then step 20 once docs/DEMO_QUESTIONS.md exists.
 
 ## How to run
 ```sh
@@ -24,6 +26,8 @@ mineru server start          # basic tier, managed; check: mineru server status 
 cd backend && source .venv/bin/activate && uvicorn app.main:app --reload --port 8000
 cd frontend && npm run dev   # http://localhost:5173
 ```
+Reset the demo workspace (servers running): `cd backend && .venv/bin/python scripts/reset_demo.py`
+
 Tests (throwaway data dir): `cd backend && .venv/bin/python tests/test_core_fixture.py` and `.venv/bin/python tests/test_folders.py`. Add `LLM_PROVIDER=none` to test extractive mode.
 
 ## Known issues
