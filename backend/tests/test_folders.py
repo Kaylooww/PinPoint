@@ -51,8 +51,10 @@ with TestClient(main.app) as c:
     os.remove(F + "/notes.txt"); open(F + "/new.txt", "w").write("New memo: the hearing was moved to June 2.\n")
     c.post(f"/api/workspaces/{WS}/folders/{fl['id']}/rescan")
     for _ in range(60):
+        # Read the folder status first, then the files, so a scan that finishes in between can't leave a stale list.
+        folder_ready = c.get(f"/api/workspaces/{WS}/folders").json()[0]["status"] == "ready"
         files = c.get(f"/api/workspaces/{WS}/files").json()
-        if c.get(f"/api/workspaces/{WS}/folders").json()[0]["status"] == "ready" and all(f["status"] in ("ready","failed") for f in files): break
+        if folder_ready and all(f["status"] in ("ready","failed") for f in files): break
         time.sleep(2)
     check("rescan: deleted removed, new added", sorted(f["name"] for f in files) == sorted(set(EXPECTED) - {"notes.txt"} | {"new.txt"}))
     check("disconnect", c.delete(f"/api/workspaces/{WS}/folders/{fl['id']}").json() == {"ok": True})
