@@ -1,0 +1,96 @@
+"""BM25 retrieval over a workspace's blocks, plus LLM query expansion."""
+
+from __future__ import annotations
+
+import re
+import threading
+from dataclasses import dataclass
+from typing import Any
+
+from rank_bm25 import BM25Okapi
+
+from . import llm, storage
+
+STOPWORDS = set(
+    """a an and are as at be by for from has have how i in is it its of on or that the this
+    to was were what when where which who whom why will with does did do can could should
+    would about into than then there their they them our your you we me my"""
+    .split()
+)
+TOKEN_RE = re.compile(r"[\w$€£₱%.,/-]+", re.UNICODE)
+
+
+def stem(token: str) -> str:
+    """Light suffix stripping so "filing", "filed", "files" and "file" all become "fil"."""
+    if token[0].isdigit() or len(token) <= 3:
+        return token
+    for suffix in ("ing", "ed", "es", "s"):
+        if token.endswith(suffix) and len(token) - len(suffix) >= 3 and not token.endswith("ss"):
+            token = token[: -len(suffix)]
+            if suffix in ("ing", "ed") and len(token) > 3 and token[-1] == token[-2]:
+                token = token[:-1]  # "submitted" -> "submit"
+            break
+    return token[:-1] if len(token) > 3 and token.endswith("e") else token
+
+
+def tokenize(text: str) -> list[str]:
+    tokens = []
+    for raw in TOKEN_RE.findall(text.lower()):
+        token = raw.strip(".,/-")
+        if token and token not in STOPWORDS:
+            tokens.append(stem(token))
+    return tokens
+
+
+@dataclass
+class Index:
+    blocks: list[dict[str, Any]]
+    bm25: BM25Okapi | None
+
+
+_indexes: dict[str, Index] = {}
+_guard = threading.Lock()
+
+
+def rebuild(ws: str) -> Index:
+    blocks = [b for b in storage.load_blocks(ws) if b.get("text", "").strip()]
+    corpus = [tokenize(b["text"]) for b in blocks]
+    bm25 = BM25Okapi(corpus) if corpus and any(corpus) else None
+    index = Index(blocks=blocks, bm25=bm25)
+    with _guard:
+        _indexes[ws] = index
+    return index
+
+
+def get_index(ws: str) -> Index:
+    with _guard:
+        index = _indexes.get(ws)
+    return index if index is not None else rebuild(ws)
+
+
+def search(ws: str, query: str, k: int = 6) -> list[tuple[dict[str, Any], float]]:
+    """Top-k blocks with a positive BM25 score, best first."""
+    index = get_index(ws)
+    terms = tokenize(query)
+    if index.bm25 is None or not terms:
+        return []
+    scores = index.bm25.get_scores(terms)
+    ranked = sorted(zip(index.blocks, scores), key=lambda pair: pair[1], reverse=True)
+    return [(block, float(score)) for block, score in ranked[:k] if score > 0]
+
+
+EXPANSION_SYSTEM = (
+    "You help search a law/business firm's documents with keyword search. "
+    "Given a question, return 5-10 short keywords and synonyms likely to appear in the "
+    "documents that answer it (names, dates, legal and business terms, alternative wordings). "
+    'Respond as {"keywords": ["..."]}.'
+)
+
+
+def expand_query(question: str) -> list[str]:
+    """Keywords and synonyms from the LLM. Raises llm.LLMError if the LLM is unavailable."""
+    reply = llm.chat_json(EXPANSION_SYSTEM, question, max_tokens=150)
+    keywords = reply.get("keywords", [])
+    if not isinstance(keywords, list):
+        return []
+    return [str(k).strip() for k in keywords if str(k).strip()][:10]

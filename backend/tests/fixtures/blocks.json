@@ -1,0 +1,21 @@
+{
+  "_note": "Temporary test fixture, not real MinerU output. Replace with blocks extracted from backend/samples/*.mineru.json.",
+  "files": [
+    {"id": "fx-motion", "name": "Santos_Motion_Extension.pdf", "type": "pdf", "pages": 2},
+    {"id": "fx-receipt", "name": "Receipt_0412.jpg", "type": "image", "pages": 1}
+  ],
+  "blocks": [
+    {"id": "fx-motion-p1-b1", "file_id": "fx-motion", "file_name": "Santos_Motion_Extension.pdf", "page": 1,
+     "locator": "doc:fx01/tier:standard/page:1/block:1",
+     "text": "MOTION FOR EXTENSION OF TIME. People v. Santos, Civil Case No. 2025-0418, Regional Trial Court, Branch 12."},
+    {"id": "fx-motion-p1-b2", "file_id": "fx-motion", "file_name": "Santos_Motion_Extension.pdf", "page": 1,
+     "locator": "doc:fx01/tier:standard/page:1/block:2",
+     "text": "The Court grants the motion. Respondent shall file its Answer on or before March 14, 2026. No further extensions will be granted."},
+    {"id": "fx-motion-p2-b1", "file_id": "fx-motion", "file_name": "Santos_Motion_Extension.pdf", "page": 2,
+     "locator": "doc:fx01/tier:standard/page:2/block:1",
+     "text": "Counsel for the respondent: Atty. Maria Reyes, Reyes & Partners Law Office, Makati City."},
+    {"id": "fx-receipt-p1-b1", "file_id": "fx-receipt", "file_name": "Receipt_0412.jpg", "page": 1,
+     "locator": "doc:fx02/tier:standard/page:1/block:1",
+     "text": "Official receipt No. 0412. Filing fee paid: PHP 3,500.00. Received by the Office of the Clerk of Court, April 12, 2025."}
+  ]
+}
