@@ -6,16 +6,20 @@ type CitationCardProps = {
   citation: Citation
   onOpen: (citation: Citation) => void
   active?: boolean
+  /** With only 1-2 citations, cards grow (up to 480px) so wide paragraph crops stay readable. */
+  wide?: boolean
 }
 
 // Figma "Citation Card" (4:72): crop on top, numbered footer with file and page.
-export function CitationCard({ citation, onOpen, active = false }: CitationCardProps) {
+export function CitationCard({ citation, onOpen, active = false, wide = false }: CitationCardProps) {
   return (
     <button
       type="button"
       onClick={() => onOpen(citation)}
       aria-label={`Open source ${citation.number}: ${citation.kind === 'note' ? 'note' : `${citation.file_name}, page ${citation.page}`}`}
-      className={`flex w-[264px] flex-col overflow-hidden rounded-card border bg-surface text-left hover:border-accent ${
+      className={`flex flex-col overflow-hidden rounded-card border bg-surface text-left hover:border-accent ${
+        wide ? 'min-w-[264px] max-w-[480px] flex-1 basis-[264px]' : 'w-[264px]'
+      } ${
         active ? 'border-accent' : 'border-border'
       }`}
     >
