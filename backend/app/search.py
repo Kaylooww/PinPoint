@@ -115,7 +115,7 @@ def expand_query(question: str, context: list[tuple[str, str]] | None = None) ->
             f"Earlier in this conversation:\n{earlier}\n\nNew question: {question}\n"
             "Resolve references in the new question (like \"it\" or \"that case\") and include the resolved names as keywords."
         )
-    reply = llm.chat_json(EXPANSION_SYSTEM, user, max_tokens=150)
+    reply = llm.chat_json(EXPANSION_SYSTEM, user, max_tokens=400)  # room for the model's reasoning tokens
     keywords = reply.get("keywords", [])
     if not isinstance(keywords, list):
         return []

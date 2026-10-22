@@ -63,7 +63,8 @@ with TestClient(main.app) as client:
     check("every sentence cites a real citation", all(s["sources"] and set(s["sources"]) <= ids for s in r1["answer"]))
     check(
         "citation shape",
-        set(r1["citations"][0]) == {"id", "number", "kind", "file_id", "file_name", "page", "locator", "text", "crop_url"},
+        {"id", "number", "kind", "file_id", "file_name", "page", "locator", "text", "excerpt", "crop_url"}
+        <= set(r1["citations"][0]) <= {"id", "number", "kind", "file_id", "file_name", "page", "locator", "text", "excerpt", "crop_url", "table"},
     )
 
     again = client.post(f"/api/workspaces/{WS}/ask", json={"question": "  when is the FILING deadline for the santos case? "}).json()

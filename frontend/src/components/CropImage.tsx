@@ -48,7 +48,7 @@ export function CropImage({ citation, size = 'card' }: CropImageProps) {
   return (
     <div className={`bg-surface-muted ${size === 'card' ? 'h-[112px] overflow-hidden px-4 pt-4 pb-3.5' : 'p-5'}`}>
       <p className={`font-serif text-doc text-text ${size === 'card' ? 'line-clamp-3' : ''}`}>
-        <mark className="rounded-[3px] bg-highlight box-decoration-clone px-1 text-text">{citation.text}</mark>
+        <mark className="rounded-[3px] bg-highlight box-decoration-clone px-1 text-text">{citation.excerpt || citation.text}</mark>
       </p>
     </div>
   )

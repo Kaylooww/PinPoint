@@ -13,10 +13,13 @@ import time
 import uuid
 from typing import Any
 
-from . import crops, llm, search, storage
+from . import crops, excerpts, llm, search, storage
 
 TOP_K = 6
 MAX_BLOCK_CHARS = 1200
+# The model reasons before answering and those tokens count toward max_tokens: about 450 of a
+# 500 budget went to reasoning, which cut the JSON off mid-quote. Leave room for both.
+ANSWER_MAX_TOKENS = 1200
 EXTRACTIVE_LABEL = "Showing matching passages."
 
 ANSWER_SYSTEM = """You answer questions using ONLY the numbered passages from the user's documents.
@@ -26,7 +29,8 @@ Rules:
 - Do not calculate totals or do arithmetic; quote the figures that appear instead.
 - If the passages do not contain the answer, set "status" to "not_found", leave "answer" empty, and give a one-sentence "reason".
 - Be brief: 1-3 sentences.
-Respond as {"status": "answered" | "not_found", "answer": [{"text": "...", "sources": ["b1"]}], "reason": "..."}"""
+- In "quotes", for each passage you cite, copy the shortest span of that passage that supports the answer, exactly as written (same words, spelling, and typos; do not fix, reword, or shorten inside the span).
+Respond as {"status": "answered" | "not_found", "answer": [{"text": "...", "sources": ["b1"]}], "quotes": {"b1": "exact words from b1"}, "reason": "..."}"""
 
 _cache: dict[tuple[str, str, tuple[str, ...]], dict[str, Any]] = {}
 _cache_guard = threading.Lock()
@@ -75,30 +79,49 @@ def _not_found(reason: str, searched_files: int, started: float) -> dict[str, An
     return _response("not_found", [], [], searched_files, started, reason)
 
 
-def _cite(ws: str, sentences: list[tuple[str, list[dict[str, Any]]]]) -> tuple[list, list]:
-    """Number cited blocks by first appearance; return (answer, citations) in the API shape."""
+MAX_CITATION_CHARS = 4000
+
+
+def _cite(
+    ws: str,
+    sentences: list[tuple[str, list[dict[str, Any]]]],
+    question: str,
+    quotes: dict[str, str] | None = None,
+) -> tuple[list, list]:
+    """Number cited blocks by first appearance; return (answer, citations) in the API shape.
+
+    `quotes` maps block id -> the LLM's proposed supporting span, used only if verbatim.
+    """
     numbers: dict[str, int] = {}
     citations: list[dict[str, Any]] = []
     answer: list[dict[str, Any]] = []
+    support: dict[str, list[str]] = {}
+    for text, blocks in sentences:
+        for block in blocks:
+            support.setdefault(block["id"], []).append(text)
     for text, blocks in sentences:
         ids = []
         for block in blocks:
             if block["id"] not in numbers:
                 n = len(numbers) + 1
                 numbers[block["id"]] = n
-                citations.append(
-                    {
-                        "id": f"c{n}",
-                        "number": n,
-                        "kind": block.get("kind", "file"),
-                        "file_id": block["file_id"],
-                        "file_name": block["file_name"],
-                        "page": block["page"],
-                        "locator": block["locator"],
-                        "text": _snippet(block["text"], 2000),
-                        "crop_url": crops.crop_url(ws, block) if block.get("kind", "file") == "file" else None,
-                    }
-                )
+                full = block["text"] if len(block["text"]) <= MAX_CITATION_CHARS else block["text"][:MAX_CITATION_CHARS] + "…"
+                query = " ".join([question, *support[block["id"]]])
+                citation = {
+                    "id": f"c{n}",
+                    "number": n,
+                    "kind": block.get("kind", "file"),
+                    "file_id": block["file_id"],
+                    "file_name": block["file_name"],
+                    "page": block["page"],
+                    "locator": block["locator"],
+                    "text": full,
+                    "excerpt": excerpts.excerpt(block["text"], query, (quotes or {}).get(block["id"])),
+                    "crop_url": crops.crop_url(ws, block) if block.get("kind", "file") == "file" else None,
+                }
+                if block.get("table"):
+                    citation["table"] = block["table"]
+                citations.append(citation)
             cid = f"c{numbers[block['id']]}"
             if cid not in ids:
                 ids.append(cid)
@@ -112,7 +135,7 @@ def _extractive(ws: str, question: str, searched_files: int, started: float) -> 
         return _not_found("No passages in these files match the question.", searched_files, started)
     best = hits[0][1]
     hits = [(b, s) for b, s in hits if s >= best * 0.25]
-    answer, citations = _cite(ws, [(_snippet(b["text"], 320), [b]) for b, _ in hits])
+    answer, citations = _cite(ws, [(_snippet(b["text"], 320), [b]) for b, _ in hits], question)
     return _response("answered", answer, citations, searched_files, started, EXTRACTIVE_LABEL)
 
 
@@ -134,9 +157,9 @@ def _generate(
         for bid, block in by_id.items()
     )
     try:
-        reply = llm.chat_json(ANSWER_SYSTEM, f"Question: {question}\n\nPassages:\n{passages}", max_tokens=500)
+        reply = llm.chat_json(ANSWER_SYSTEM, f"Question: {question}\n\nPassages:\n{passages}", max_tokens=ANSWER_MAX_TOKENS)
     except llm.LLMBadJSON:
-        return _not_found("The answer could not be checked against the files.", searched_files, started)
+        return {**_not_found("The answer could not be checked against the files.", searched_files, started), "_nocache": True}
 
     # Validation in code: keep only sentences whose sources are passages we actually sent.
     sentences: list[tuple[str, list[dict[str, Any]]]] = []
@@ -153,7 +176,9 @@ def _generate(
     if not sentences:
         reason = str(reply.get("reason") or "").strip() or "These files don't contain the answer."
         return _not_found(reason, searched_files, started)
-    answer, citations = _cite(ws, sentences)
+    raw_quotes = reply.get("quotes") if isinstance(reply.get("quotes"), dict) else {}
+    quotes = {by_id[k]["id"]: v for k, v in raw_quotes.items() if k in by_id and isinstance(v, str)}
+    answer, citations = _cite(ws, sentences, question, quotes)
     return _response("answered", answer, citations, searched_files, started)
 
 
@@ -184,6 +209,8 @@ def _answer(ws: str, question: str, context: list[tuple[str, str]]) -> dict[str,
             response = _extractive(ws, question, searched_files, started)
             cacheable = False
 
+    if response.pop("_nocache", False):
+        cacheable = False  # a garbled LLM reply shouldn't stick; try again next time
     if cacheable:
         with _cache_guard:
             _cache[key] = response

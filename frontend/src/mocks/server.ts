@@ -142,7 +142,7 @@ async function answer(ws: string, question: string): Promise<AskResponse> {
       status: 'answered',
       answer: [{ text: 'The client prefers to be updated by email rather than by phone.', sources: ['c1'] }],
       citations: [
-        { id: 'c1', number: 1, kind: 'note', file_id: note.id, file_name: 'Note', page: 1, locator: `note:${note.id}`, text: note.text, crop_url: null },
+        { id: 'c1', number: 1, kind: 'note', file_id: note.id, file_name: 'Note', page: 1, locator: `note:${note.id}`, text: note.text, excerpt: note.text, crop_url: null },
       ],
       searched_files: ready,
       elapsed_ms,

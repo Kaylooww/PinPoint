@@ -36,8 +36,13 @@ export type Citation = {
   file_name: string
   page: number
   locator: string
+  /** Full cleaned block text, with line breaks. */
   text: string
+  /** Short supporting passage, always literally from the block. */
+  excerpt: string
   crop_url: string | null
+  /** Rows of cells when the block is a table. */
+  table?: string[][]
 }
 
 export type AnswerSentence = {

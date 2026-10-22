@@ -1,6 +1,7 @@
-import { Check, Copy, FileText, X, StickyNote } from 'lucide-react'
+import { Check, ChevronDown, Copy, FileText, X, StickyNote } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import type { Citation } from '../lib/types'
+import { BlockText } from './BlockText'
 import { Button } from './Button'
 import { CropImage } from './CropImage'
 
@@ -14,6 +15,7 @@ type CitationPanelProps = {
 // Render with key={citation.id} so per-source state (Copied) resets when switching sources.
 export function CitationPanel({ citation, total, onClose }: CitationPanelProps) {
   const [copied, setCopied] = useState(false)
+  const [showFull, setShowFull] = useState(false)
   const closeRef = useRef<HTMLButtonElement>(null)
 
   useEffect(() => {
@@ -24,6 +26,10 @@ export function CitationPanel({ citation, total, onClose }: CitationPanelProps) 
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
   }, [onClose])
+
+  // Older history entries predate excerpts; fall back to the full text.
+  const excerpt = citation.excerpt || citation.text
+  const hasMore = citation.text.replace(/\s+/g, ' ').trim() !== excerpt.replace(/\s+/g, ' ').trim() || !!citation.table
 
   const copy = async () => {
     try {
@@ -73,8 +79,25 @@ export function CitationPanel({ citation, total, onClose }: CitationPanelProps) 
         <CropImage citation={citation} size="panel" />
       </div>
 
-      <p className="text-eyebrow text-muted uppercase">{citation.kind === 'note' ? 'Note' : 'Extracted text'}</p>
-      <p className="text-small whitespace-pre-line text-text">{citation.text}</p>
+      <p className="text-eyebrow text-muted uppercase">{citation.kind === 'note' ? 'Note' : 'Relevant passage'}</p>
+      <p className="font-serif text-doc whitespace-pre-line text-text">
+        <mark className="rounded-[3px] bg-highlight box-decoration-clone px-1 text-text">{excerpt}</mark>
+      </p>
+
+      {hasMore && (
+        <div className="flex flex-col gap-3">
+          <button
+            type="button"
+            onClick={() => setShowFull((v) => !v)}
+            aria-expanded={showFull}
+            className="flex items-center gap-1.5 self-start text-small font-medium text-accent hover:text-accent-hover"
+          >
+            <ChevronDown size={16} strokeWidth={1.75} className={showFull ? 'rotate-180' : ''} />
+            {showFull ? 'Hide full text' : 'Show full text'}
+          </button>
+          {showFull && <BlockText citation={citation} />}
+        </div>
+      )}
 
       <div className="flex gap-2">
         <Button variant="secondary" Icon={copied ? Check : Copy} onClick={copy}>
