@@ -39,6 +39,10 @@ class LLMUnavailable(LLMError):
     """No LLM is configured (LLM_PROVIDER=none or missing settings)."""
 
 
+class LLMBadJSON(LLMError):
+    """The LLM answered, but not with valid JSON, even after one stricter retry."""
+
+
 @dataclass(frozen=True)
 class Config:
     provider: str
@@ -116,9 +120,10 @@ def _call_openai_compatible(cfg: Config, system: str, user: str, max_tokens: int
                     {"role": "system", "content": system},
                     {"role": "user", "content": user},
                 ],
-                "temperature": 0.1,
+                # The organizers' server (Claude Haiku behind Open WebUI) rejects `temperature`
+                # and accepts only strict json_schema response formats, so JSON is enforced
+                # by the prompt plus parse_json_object() and one retry instead.
                 "max_tokens": max_tokens,
-                "response_format": {"type": "json_object"},
             },
             timeout=cfg.timeout,
         )
@@ -193,7 +198,7 @@ def chat_json(system: str, user: str, max_tokens: int = 500) -> dict[str, Any]:
     try:
         return parse_json_object(text)
     except json.JSONDecodeError as e:
-        raise LLMError("LLM did not return valid JSON after a retry") from e
+        raise LLMBadJSON("LLM did not return valid JSON after a retry") from e
 
 
 _HEALTH_TTL_SECONDS = 60.0
