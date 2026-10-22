@@ -1,6 +1,6 @@
 # PinPoint — Handoff
 
-Last updated: Thursday 13:50, after Phase D items 15–16 (history, saved, follow-ups).
+Last updated: Thursday 13:45, after Phase D item 17 (knowledge stats).
 
 ## Done (and tested)
 - Phase A 1–6: backend core on MinerU **basic** tier; both samples parse to ready; crops; API end-to-end.
@@ -9,13 +9,13 @@ Last updated: Thursday 13:50, after Phase D items 15–16 (history, saved, follo
 - Phase D 13 Notes: done end to end (Memory tab add/delete, note citation cards, panel). Browser-tested against the real backend in light and dark.
 - Phase D 14 Folders: done end to end (Add files → Connect a local folder dialog, Connected folders section, Rescan, Disconnect, Folder tag). Browser-tested with a 3-file folder; folder untouched on disk.
 - Phase D 15–16: done end to end. Ask is a thread (Save per answer, Ask a follow-up keeps thread_id, New question resets), recent questions from GET /history, ?h=<id> reopens a past answer without re-asking; Memory tab has Saved answers and History grouped by day. Browser-tested in light and dark.
-- Phase D backend half (tests pass): 17 knowledge.
+- Phase D 17: knowledge stats strip at the top of the Files tab (GET /knowledge), refreshed when files change. Browser-checked against the API.
 
 ## In progress
 - Phase D frontend halves, in order 13 → 18.
 
 ## Exact next step
-- 17 stats strip under the workspace title on Files (GET /knowledge): "6 files · 41 pages · 312 passages indexed · 2 notes · Updated 2 min ago". Then 18 workspaces grid + New workspace dialog, static Sign in and Landing, "/" → Landing.
+- 18: workspaces grid (Figma 6:172) + New workspace dialog (name + industry, POST /api/workspaces), recent questions on the grid from history; static Sign in (8:1110) and Landing (8:845), pricing buttons inert, Get started → /signin; then point "/" to Landing.
 
 ## How to run
 ```sh

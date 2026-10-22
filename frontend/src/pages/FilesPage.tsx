@@ -7,7 +7,8 @@ import { ConnectFolderDialog } from '../components/ConnectFolderDialog'
 import { FileRow } from '../components/FileRow'
 import { api } from '../lib/api'
 import { ACCEPT, canPickDirectory, filterFolderInput, isSupported, pickDirectoryFiles } from '../lib/folders'
-import type { FileItem, Folder } from '../lib/types'
+import type { FileItem, Folder, KnowledgeStats } from '../lib/types'
+import { timeAgo } from '../lib/format'
 import { useWorkspaceOutlet } from '../lib/workspaceOutlet'
 import { useWorkspaces } from '../lib/workspaces'
 
@@ -21,6 +22,7 @@ export function FilesPage() {
   const { refresh: refreshWorkspaces } = useWorkspaces()
   const [files, setFiles] = useState<FileItem[] | null>(null)
   const [folders, setFolders] = useState<Folder[]>([])
+  const [stats, setStats] = useState<KnowledgeStats | null>(null)
   const [connecting, setConnecting] = useState(false)
   const [loadError, setLoadError] = useState<string | null>(null)
   const [uploadMessage, setUploadMessage] = useState<string | null>(null)
@@ -50,6 +52,7 @@ export function FilesPage() {
           if (signature !== lastSignature.current) {
             if (lastSignature.current) void refreshWorkspaces()
             lastSignature.current = signature
+            api.knowledge(id).then(setStats, () => undefined)
           }
         },
         (e: unknown) => setLoadError(e instanceof Error ? e.message : 'Could not load files.'),
@@ -156,6 +159,7 @@ export function FilesPage() {
 
   return (
     <div className="flex flex-col gap-5">
+      {stats && <KnowledgeStrip stats={stats} />}
       <input
         ref={fileInput}
         type="file"
@@ -310,5 +314,23 @@ function MenuItem({ Icon, label, onClick }: { Icon: typeof FileUp; label: string
       <Icon size={16} strokeWidth={1.75} className="text-muted" />
       {label}
     </button>
+  )
+}
+
+/** "6 files · 41 pages · 312 passages indexed · 2 notes · Updated 2 min ago" (GET /knowledge). */
+function KnowledgeStrip({ stats }: { stats: KnowledgeStats }) {
+  const plural = (n: number, word: string) => `${n.toLocaleString()} ${word}${n === 1 ? '' : 's'}`
+  const parts = [
+    plural(stats.files, 'file'),
+    plural(stats.pages, 'page'),
+    `${plural(stats.passages, 'passage')} indexed`,
+    plural(stats.notes, 'note'),
+  ]
+  if (stats.folders > 0) parts.push(plural(stats.folders, 'connected folder'))
+  if (stats.last_indexed_at) parts.push(`Updated ${timeAgo(stats.last_indexed_at)}`)
+  return (
+    <p className="-mt-1 text-small text-muted" aria-label="Knowledge stats">
+      {parts.join(' · ')}
+    </p>
   )
 }

@@ -26,6 +26,6 @@
 - [x] Notes (indexed and citable)
 - [x] Browser folder upload
 - [x] Connected local folders with rescan and disconnect
-- [ ] Knowledge stats (backend done; UI pending)
+- [x] Knowledge stats
 ## Demo
 - [ ] Load the demo workspace, rehearse questions, record a backup video
