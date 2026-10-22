@@ -1,6 +1,6 @@
 # PinPoint — Handoff
 
-Last updated: Thursday 13:58, Phase E step 19 (reset_demo.py). Branch: demo-prep (main has PRs #1 and #2 merged).
+Last updated: Thursday 14:00, Phase E step 22 (DEMO.md draft). Branch: demo-prep.
 
 ## Done (and tested)
 - Phase A 1–6: backend core on MinerU **basic** tier; both samples parse to ready; crops; API end-to-end.
@@ -14,11 +14,12 @@ Last updated: Thursday 13:58, Phase E step 19 (reset_demo.py). Branch: demo-prep
 
 ## In progress
 - Phase E (started early; 18b Landing/Sign in comes as a patch from another session — don't touch LandingPage.tsx, SignInPage.tsx, or the routes in App.tsx).
+- Step 22 drafted: docs/DEMO.md (start order, checklist, click-by-click script with questions verified on the samples, fallback plan). Swap in docs/DEMO_QUESTIONS.md when it exists.
 - Step 19 done: `backend/scripts/reset_demo.py` rebuilds Reyes & Partners and waits until all files are ready. backend/demo_files/ doesn't exist yet, so it uses backend/samples/ (2 files, 3 pages).
 - Phase D frontend halves, in order 13 → 18.
 
 ## Exact next step
-- Step 22: draft docs/DEMO.md. Then a full demo run (light + dark), then step 20 once docs/DEMO_QUESTIONS.md exists.
+- Full demo run against the real backend in light and dark (upload → ready → ask → cited answer → crops → panel → follow-up → save → not-found); fix only real bugs. Then step 20 once docs/DEMO_QUESTIONS.md exists.
 
 ## How to run
 ```sh
