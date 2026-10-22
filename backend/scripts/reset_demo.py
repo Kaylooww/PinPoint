@@ -103,6 +103,7 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--api", default="http://localhost:8000", help="backend base URL")
     parser.add_argument("--timeout", type=int, default=900, help="seconds to wait for parsing, per workspace")
+    parser.add_argument("--only", choices=[ws for ws, *_ in WORKSPACES], help="rebuild just this workspace")
     args = parser.parse_args()
     api = args.api.rstrip("/")
 
@@ -117,7 +118,11 @@ def main() -> int:
         if not parse_ok:
             print("MinerU's parse server isn't healthy. Run: mineru server start, then check mineru server status --json")
             return 1
-        results = [rebuild(client, ws_id, name, industry, folders, args.timeout) for ws_id, name, industry, folders in WORKSPACES]
+        results = [
+            rebuild(client, ws_id, name, industry, folders, args.timeout)
+            for ws_id, name, industry, folders in WORKSPACES
+            if args.only in (None, ws_id)
+        ]
 
     print("\nAll demo workspaces ready." if all(results) else "\nSome demo workspaces need attention (see above).")
     return 0 if all(results) else 1
