@@ -104,7 +104,7 @@ def _extractive(ws: str, question: str, searched_files: int, started: float) -> 
     if not hits:
         return _not_found("No passages in these files match the question.", searched_files, started)
     best = hits[0][1]
-    hits = [(b, s) for b, s in hits if s >= best * 0.3]
+    hits = [(b, s) for b, s in hits if s >= best * 0.25]
     answer, citations = _cite(ws, [(_snippet(b["text"], 320), [b]) for b, _ in hits])
     return _response("answered", answer, citations, searched_files, started, EXTRACTIVE_LABEL)
 

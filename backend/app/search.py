@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import math
 import re
 import threading
 from dataclasses import dataclass
@@ -42,10 +43,24 @@ def tokenize(text: str) -> list[str]:
     return tokens
 
 
+class BM25(BM25Okapi):
+    """BM25Okapi with Lucene's always-positive IDF.
+
+    The classic IDF is 0 (or negative) for a term in half or more of the blocks, which
+    zeroes out real matches in a small workspace.
+    """
+
+    def _calc_idf(self, nd: dict[str, int]) -> None:
+        n_docs = self.corpus_size
+        for word, freq in nd.items():
+            self.idf[word] = math.log(1 + (n_docs - freq + 0.5) / (freq + 0.5))
+        self.average_idf = sum(self.idf.values()) / len(self.idf) if self.idf else 0.0
+
+
 @dataclass
 class Index:
     blocks: list[dict[str, Any]]
-    bm25: BM25Okapi | None
+    bm25: BM25 | None
 
 
 _indexes: dict[str, Index] = {}
@@ -55,7 +70,7 @@ _guard = threading.Lock()
 def rebuild(ws: str) -> Index:
     blocks = [b for b in storage.load_blocks(ws) if b.get("text", "").strip()]
     corpus = [tokenize(b["text"]) for b in blocks]
-    bm25 = BM25Okapi(corpus) if corpus and any(corpus) else None
+    bm25 = BM25(corpus) if corpus and any(corpus) else None
     index = Index(blocks=blocks, bm25=bm25)
     with _guard:
         _indexes[ws] = index
