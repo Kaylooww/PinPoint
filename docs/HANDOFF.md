@@ -1,6 +1,6 @@
 # PinPoint — Handoff
 
-Last updated: Thursday 15:55, Villanueva rebuilt with real BIR documents. Branch: new-logo.
+Last updated: Thursday 16:01, heading breadcrumbs. Branch: breadcrumbs (stacked on new-logo / PR #12).
 
 ## Done (and tested)
 - Phase A 1–6: backend core on MinerU **basic** tier; both samples parse to ready; crops; API end-to-end.
@@ -13,6 +13,7 @@ Last updated: Thursday 15:55, Villanueva rebuilt with real BIR documents. Branch
 - Phase D 17: knowledge stats strip at the top of the Files tab (GET /knowledge), refreshed when files change. Browser-checked against the API.
 
 ## In progress
+- Breadcrumbs DONE: blocks carry path + heading_ids (Article/Rule/Section/… with TOC pages skipped); rebuilt from saved parses with scripts/rebuild_blocks.py (no MinerU; counts unchanged: Reyes 6363, Villanueva 292; blocks.json.bak kept). BM25 indexes path + text; embeddings keep raw text (a path-prefixed re-embed of 6k blocks hit HTTP 429 and pruned vectors, so vectors were restored from embeddings.json.bak). Context shows each block's path and adds up to 4 heading blocks; prompt names the full location. Cards and the panel show "Article VI · Section 24". Live: treaty → Article VII, Section 21, two-thirds (the treaty clause is in Article VII, not VI); appropriation bills → Article VI, Section 24; ordinary appeal → Rule 41, Section 3, 15 days; demo questions per client and a not-found OK.
 - New logo DONE: frontend/public/pinpoint-logo.png (from the image shared in chat; it wasn't in the repo yet). Logo component = full-color mark (28px sidebar, size prop, 24px for small uses) + "PinPoint" wordmark; LogoMark export for 64–96px hero/empty-state use. favicon-32/16, apple-touch-icon (180, on white), icon-512 generated with Pillow; index.html links them; Vite favicon.svg removed. Landing and Sign in are still placeholders without the Logo component (the patch hasn't landed), so they show no logo yet: the patch should use <Logo /> or <LogoMark size={80} />.
 - Structured answers DONE: answer items have kind paragraph | bullet | numbered | heading (missing → paragraph, so old history renders); per-item citation rule unchanged, headings uncited labels that never count as the answer, stray markdown stripped; AnswerCard renders <ul>/<ol>/H3 labels with markers per item; Copy answer keeps bullets and numbers; answer max_tokens 2000 (structured lists were cut off at 1200). Tests: tests/test_structured.py; live: House bills → intro + 6 cited bullets, Villanueva deadlines → 4 numbered, receipt → one paragraph, Santos → not found; Save, crops, history reopen OK; light + dark.
 - Demo account is now Luther Dira · luther@reyeslaw.ph (sidebar, initials LD).
@@ -43,7 +44,7 @@ cd frontend && npm run dev   # http://localhost:5173
 Reset both demo workspaces (servers running): `cd backend && .venv/bin/python scripts/reset_demo.py`
 Warm the answer cache (after the final backend start): `cd backend && .venv/bin/python scripts/warm_cache.py`
 
-Tests (throwaway data dir): `cd backend && .venv/bin/python tests/test_core_fixture.py`, `tests/test_folders.py`, and `tests/test_excerpts.py` (no network), and `tests/test_documents.py` (raw/text endpoints refuse unknown and path-like ids), and `tests/test_context.py` and `tests/test_suggestions.py` (`--offline` skips their live parts), `tests/test_picker.py` (folder picker contract, dialog faked), `tests/test_tiers.py` (tier choice and flash→basic fallback), `tests/test_structured.py` (answer item kinds and per-item citation rules), `tests/test_hybrid.py` (embedding fallbacks offline, zero outbound with LLM_PROVIDER=none, plus a live "Who is the renter?" check; `--offline` skips the live part). Add `LLM_PROVIDER=none` to test extractive mode.
+Tests (throwaway data dir): `cd backend && .venv/bin/python tests/test_core_fixture.py`, `tests/test_folders.py`, and `tests/test_excerpts.py` (no network), and `tests/test_documents.py` (raw/text endpoints refuse unknown and path-like ids), and `tests/test_context.py` and `tests/test_suggestions.py` (`--offline` skips their live parts), `tests/test_picker.py` (folder picker contract, dialog faked), `tests/test_tiers.py` (tier choice and flash→basic fallback), `tests/test_structured.py` (answer item kinds and per-item citation rules), `tests/test_breadcrumbs.py` (heading paths, resets, TOC pages), `tests/test_hybrid.py` (embedding fallbacks offline, zero outbound with LLM_PROVIDER=none, plus a live "Who is the renter?" check; `--offline` skips the live part). Add `LLM_PROVIDER=none` to test extractive mode.
 
 ## Known issues
 - "Who signed the engagement letter for the bakery?" (not a demo question) returns not_found: the generated letter's two-column signature block splits names from titles. Don't use it in the demo.

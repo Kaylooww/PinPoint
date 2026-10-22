@@ -43,6 +43,8 @@ export type Citation = {
   crop_url: string | null
   /** Rows of cells when the block is a table. */
   table?: string[][]
+  /** Headings above the block, outermost first, e.g. ["Article VI — The Legislative Department", "Section 21"]. */
+  path?: string[]
 }
 
 export type AnswerKind = 'paragraph' | 'bullet' | 'numbered' | 'heading'

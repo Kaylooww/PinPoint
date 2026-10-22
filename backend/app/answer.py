@@ -17,6 +17,7 @@ from . import crops, excerpts, llm, search, storage
 
 TOP_K = 6
 MAX_CONTEXT_BLOCKS = 12
+MAX_HEADING_BLOCKS = 4
 BLOCK_POSITION = re.compile(r"-p(\d+)-b(\d+)$")
 MAX_BLOCK_CHARS = 1200
 # The model reasons before answering and those tokens count toward max_tokens: about 450 of a
@@ -30,6 +31,7 @@ Rules:
 - Use only facts stated in the passages. No outside knowledge, no guesses.
 - Do not calculate totals or do arithmetic; quote the figures that appear instead.
 - If the passages do not contain the answer, set "status" to "not_found", leave "answer" empty, and give a one-sentence "reason".
+- Passages may start with their location in the document (for example "Article VI — The Legislative Department > Section 21:"). When a passage sits under a numbered Article, Rule, Chapter, Title, or Section, name the full location in the answer, e.g. "Article VI, Section 21". Never say the article or rule isn't named when a location is given. Heading passages are citable for that location.
 - Be brief and easy to scan. Format "answer" as a list of items, each with a "kind":
   - Start with a one-sentence direct answer ("paragraph").
   - When the answer names 3 or more things (types of bills, requirements, parties, fees), the first paragraph says what they are in general, then give one "bullet" item per thing. Do not pack the list into one sentence.
@@ -211,6 +213,8 @@ def _citation(ws: str, block: dict[str, Any], n: int, query: str, quote: str | N
     }
     if block.get("table"):
         citation["table"] = block["table"]
+    if block.get("path"):
+        citation["path"] = block["path"]
     return citation
 
 
@@ -360,9 +364,20 @@ def _generate(
 
     pool = [b for b in search.get_index(ws).blocks if file_ids is None or b["file_id"] in file_ids]
     context = expand_context(pool, [block for block, _ in hits])
+    # The headings above the retrieved passages (e.g. the "Article VI" block), so a claim
+    # about the location can cite the heading itself: at most 4 extra blocks.
+    by_block_id = {b["id"]: b for b in pool}
+    in_context = {b["id"] for b in context}
+    extra = []
+    for block, _ in hits:
+        for hid in block.get("heading_ids") or []:
+            if hid not in in_context and hid in by_block_id and len(extra) < MAX_HEADING_BLOCKS:
+                extra.append(by_block_id[hid])
+                in_context.add(hid)
+    context = extra + context
     by_id = {f"b{i}": block for i, block in enumerate(context, start=1)}
     passages = "\n\n".join(
-        f"[{bid}] ({_source_label(block)})\n{_snippet(block['text'], MAX_BLOCK_CHARS)}"
+        f"[{bid}] ({_source_label(block)}) {' > '.join(block.get('path') or [])}{':' if block.get('path') else ''}\n{_snippet(block['text'], MAX_BLOCK_CHARS)}"
         for bid, block in by_id.items()
     )
     try:

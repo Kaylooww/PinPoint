@@ -34,6 +34,12 @@ def stem(token: str) -> str:
     return token[:-1] if len(token) > 3 and token.endswith("e") else token
 
 
+def index_text(block: dict[str, Any]) -> str:
+    """What search sees: the heading path, then the text ("Article VI — ... > Section 21: ...")."""
+    path = block.get("path") or []
+    return f"{' > '.join(path)}: {block['text']}" if path else block["text"]
+
+
 def tokenize(text: str) -> list[str]:
     tokens = []
     for raw in TOKEN_RE.findall(text.lower()):
@@ -69,7 +75,7 @@ _guard = threading.Lock()
 
 def rebuild(ws: str) -> Index:
     blocks = [b for b in storage.load_blocks(ws) + storage.note_blocks(ws) if b.get("text", "").strip()]
-    corpus = [tokenize(b["text"]) for b in blocks]
+    corpus = [tokenize(index_text(b)) for b in blocks]
     bm25 = BM25(corpus) if corpus and any(corpus) else None
     index = Index(blocks=blocks, bm25=bm25)
     with _guard:

@@ -1,5 +1,6 @@
 import { FileText, StickyNote } from 'lucide-react'
 import type { Citation } from '../lib/types'
+import { breadcrumb } from '../lib/format'
 import { CropImage } from './CropImage'
 
 type CitationCardProps = {
@@ -24,7 +25,12 @@ export function CitationCard({ citation, onOpen, active = false, wide = false }:
       }`}
     >
       <CropImage citation={citation} />
-      <div className="flex w-full items-center gap-2 border-t border-border px-3.5 py-2.5">
+      {citation.path?.length ? (
+        <p className="truncate border-t border-border px-3.5 pt-2 text-label text-muted" title={citation.path.join(' > ')}>
+          {breadcrumb(citation.path)}
+        </p>
+      ) : null}
+      <div className={`flex w-full items-center gap-2 px-3.5 py-2.5 ${citation.path?.length ? 'pt-1' : 'border-t border-border'}`}>
         <span className="flex size-[18px] shrink-0 items-center justify-center rounded-pill bg-accent-soft text-label text-accent">
           {citation.number}
         </span>
