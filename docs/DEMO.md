@@ -31,7 +31,7 @@ It uses `backend/demo_files/`, or `backend/samples/` if that folder is missing o
 - [ ] MinerU healthy: `mineru server status --json` → `parse_server.local.healthy: true`.
 - [ ] `/api/health` shows `"mineru": {"ok": true}`.
 - [ ] `reset_demo.py` ran and printed `Done: N/N files ready`.
-- [ ] Answer cache warmed: run every question in `docs/DEMO_QUESTIONS.md` once (or `scripts/warm_cache.py` once it exists). Warm answers come back instantly, and their crops are already on disk.
+- [ ] Answer cache warmed, as the **last** step after the final backend start (a backend restart clears the cache): `cd backend && .venv/bin/python scripts/warm_cache.py`. It asks every question in `docs/DEMO_QUESTIONS.md` and prints each status. Warm answers come back instantly, and their crops are already on disk.
 - [ ] The file to upload live is on the Desktop (a photo or PDF not already in the workspace).
 - [ ] Theme set to Light; dark mode is shown during the demo.
 - [ ] No git checkout or pull in this folder while the servers run (it can stall Vite's Tailwind step; see fallback plan).

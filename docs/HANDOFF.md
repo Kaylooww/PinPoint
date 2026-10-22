@@ -1,6 +1,6 @@
 # PinPoint — Handoff
 
-Last updated: Thursday 14:05, Phase E full demo run done. Branch: demo-prep.
+Last updated: Thursday 14:06, warm_cache.py ready for step 20. Branch: demo-prep.
 
 ## Done (and tested)
 - Phase A 1–6: backend core on MinerU **basic** tier; both samples parse to ready; crops; API end-to-end.
@@ -20,7 +20,7 @@ Last updated: Thursday 14:05, Phase E full demo run done. Branch: demo-prep.
 - Phase D frontend halves, in order 13 → 18.
 
 ## Exact next step
-- Step 20 once docs/DEMO_QUESTIONS.md exists: warm the cache with those questions (and re-check each answer). Put the final demo files, with readable names, in backend/demo_files/ and rerun scripts/reset_demo.py first.
+- Step 20 once docs/DEMO_QUESTIONS.md exists: `cd backend && .venv/bin/python scripts/warm_cache.py` (asks every line ending in "?", reports status/citations/crops; the cache is in memory, so run it after the final backend start), then re-check each answer. Put the final demo files, with readable names, in backend/demo_files/ and rerun scripts/reset_demo.py first.
 
 ## How to run
 ```sh
@@ -29,6 +29,7 @@ cd backend && source .venv/bin/activate && uvicorn app.main:app --reload --port 
 cd frontend && npm run dev   # http://localhost:5173
 ```
 Reset the demo workspace (servers running): `cd backend && .venv/bin/python scripts/reset_demo.py`
+Warm the answer cache (after the final backend start): `cd backend && .venv/bin/python scripts/warm_cache.py`
 
 Tests (throwaway data dir): `cd backend && .venv/bin/python tests/test_core_fixture.py` and `.venv/bin/python tests/test_folders.py`. Add `LLM_PROVIDER=none` to test extractive mode.
 
