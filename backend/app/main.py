@@ -4,12 +4,12 @@ from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from typing import Any
 
-from fastapi import FastAPI, File, HTTPException, UploadFile
+from fastapi import FastAPI, File, HTTPException, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, JSONResponse
 from pydantic import BaseModel, Field
 
-from . import answer, crops, folders, llm, parsing, search, storage
+from . import answer, crops, folders, llm, parsing, picker, search, storage
 
 MAX_UPLOAD_BYTES = 50 * 1024 * 1024
 
@@ -76,6 +76,20 @@ def health() -> dict[str, Any]:
         "embeddings": llm.embed_health(),
         "mineru": parsing.server_status(),
     }
+
+
+@app.post("/api/system/pick-folder", response_model=None)
+def pick_folder(request: Request) -> dict[str, str | None] | JSONResponse:
+    """Open the OS folder picker and return the chosen path (null if cancelled).
+
+    Localhost only. It does not connect the folder; POST /folders validates the path.
+    """
+    if request.client is None or request.client.host not in ("127.0.0.1", "::1"):
+        return JSONResponse(status_code=403, content={"error": "The folder picker is only available on this computer."})
+    try:
+        return {"path": picker.pick_folder()}
+    except picker.PickerUnavailable:
+        return JSONResponse(status_code=501, content={"error": "Folder picker not available; type the path instead."})
 
 
 @app.get("/api/workspaces")

@@ -64,6 +64,7 @@ PATCH  /api/workspaces/{ws}/history/{id} {"saved": bool} → HistoryItem
 GET    /api/workspaces/{ws}/notes → Note[]
 POST   /api/workspaces/{ws}/notes {"text"} → Note
 DELETE /api/workspaces/{ws}/notes/{id} → {"ok": true}
+POST   /api/system/pick-folder → {"path": "/abs/path"} or {"path": null} if the user cancels. Opens the OS folder picker on this computer (macOS: osascript "choose folder"; Windows: PowerShell FolderBrowserDialog; no shell, 120 s timeout) and returns the chosen path without a trailing slash. It does not connect anything: POST /folders still validates the path and applies every limit. Only from localhost (request.client.host 127.0.0.1 or ::1), else 403. Other OS or failure → 501 {"error": "Folder picker not available; type the path instead."}. No network calls.
 GET    /api/workspaces/{ws}/folders → Folder[]
 POST   /api/workspaces/{ws}/folders {"path"} → Folder
 POST   /api/workspaces/{ws}/folders/{id}/rescan → Folder

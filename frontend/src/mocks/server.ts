@@ -299,3 +299,8 @@ export async function getFileText(ws: string, fileId: string): Promise<FileText>
       : [{ page: 1, blocks: [{ text: 'Mock mode has no parsed text for this file.', locator: 'mock' }] }],
   }
 }
+
+export async function pickFolder(): Promise<string | null> {
+  await delay(500)
+  return '/Users/maria/Documents/Reyes Client Files'
+}

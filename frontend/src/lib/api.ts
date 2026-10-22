@@ -145,4 +145,11 @@ export const api = {
     USE_MOCKS
       ? mock.getFileText(ws, fileId)
       : request(`/api/workspaces/${encodeURIComponent(ws)}/files/${encodeURIComponent(fileId)}/text`),
+
+  /** Opens the OS folder picker on this computer; null if the user cancels. Throws if unavailable. */
+  pickFolder: async (): Promise<string | null> => {
+    if (USE_MOCKS) return mock.pickFolder()
+    const res = await request<{ path: string | null }>('/api/system/pick-folder', { method: 'POST' })
+    return res.path
+  },
 }

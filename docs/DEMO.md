@@ -137,6 +137,7 @@ The questions below are verified against the current sample files. Swap in the f
 |---|---|
 | Embedding server unreachable (`/api/health` embeddings not ok) | Nothing to do: search falls back to keywords (BM25) silently. Prefer questions that use the document's own words. |
 | Venue Wi-Fi down, or the LLM server errors or is slow | Nothing to do live: answers automatically switch to **extractive mode** ("Showing matching passages") with the same citations and crops. To force it for the rest of the demo, set `LLM_PROVIDER=none` in `backend/.env` and restart the backend; this makes no outbound calls at all. |
+| Nothing appears after clicking **Browse…** in "Connect a local folder" | The Finder dialog may have opened behind the browser: check the Dock for it. Or type or paste the folder path into the field instead. |
 | A live upload fails or takes too long | Skip it. The pre-loaded files already cover every question. |
 | MinerU stops | Already-parsed files and warmed answers keep working (the index and crops are on disk). Only new uploads need MinerU: run `mineru server restart`. |
 | The page suddenly has no styling (giant icons, plain text) | Vite's Tailwind step stalled after files changed under it (for example a git checkout while it was running). Stop `npm run dev` and start it again, then reload the browser. |
