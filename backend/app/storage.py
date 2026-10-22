@@ -365,3 +365,97 @@ def folder_view(ws: str, record: dict[str, Any]) -> dict[str, Any]:
     if record.get("error"):
         view["error"] = record["error"]
     return view
+
+
+# History: every ask, with its full response, thread, and saved flag (history.json).
+
+
+def list_history_records(ws: str) -> list[dict[str, Any]]:
+    return _read_json(ws_dir(ws) / "history.json", [])
+
+
+def add_history(ws: str, question: str, response: dict[str, Any], thread_id: str) -> dict[str, Any]:
+    record = {
+        "id": uuid.uuid4().hex[:12],
+        "question": question,
+        "response": response,
+        "thread_id": thread_id,
+        "created_at": now_iso(),
+        "saved": False,
+    }
+    with lock(ws):
+        records = list_history_records(ws)
+        records.append(record)
+        _write_json(ws_dir(ws) / "history.json", records)
+    return record
+
+
+def get_history(ws: str, history_id: str) -> dict[str, Any]:
+    for record in list_history_records(ws):
+        if record["id"] == history_id:
+            return record
+    raise NotFound(history_id)
+
+
+def set_history_saved(ws: str, history_id: str, saved: bool) -> dict[str, Any]:
+    with lock(ws):
+        records = list_history_records(ws)
+        for record in records:
+            if record["id"] == history_id:
+                record["saved"] = saved
+                _write_json(ws_dir(ws) / "history.json", records)
+                return record
+    raise NotFound(history_id)
+
+
+def answer_text(response: dict[str, Any]) -> str:
+    return " ".join(s["text"] for s in response.get("answer", []))
+
+
+def history_item(record: dict[str, Any]) -> dict[str, Any]:
+    response = record["response"]
+    preview = answer_text(response) or response.get("reason") or ""
+    return {
+        "id": record["id"],
+        "question": record["question"],
+        "status": response["status"],
+        "answer_preview": preview[:160] + ("…" if len(preview) > 160 else ""),
+        "thread_id": record["thread_id"],
+        "created_at": record["created_at"],
+        "saved": record["saved"],
+    }
+
+
+def history_detail(record: dict[str, Any]) -> dict[str, Any]:
+    return {k: record[k] for k in ("question", "response", "thread_id", "created_at", "saved")}
+
+
+def thread_context(ws: str, thread_id: str, limit: int = 3) -> list[tuple[str, str]]:
+    """The last `limit` (question, answer) pairs of a thread, oldest first."""
+    turns = [r for r in list_history_records(ws) if r["thread_id"] == thread_id]
+    return [(r["question"], answer_text(r["response"]) or "(not found)") for r in turns[-limit:]]
+
+
+# Knowledge stats
+
+
+def _mtime_iso(paths: list[Path]) -> str | None:
+    times = [p.stat().st_mtime for p in paths if p.exists()]
+    if not times:
+        return None
+    return datetime.fromtimestamp(max(times), timezone.utc).isoformat(timespec="seconds")
+
+
+def knowledge_stats(ws: str) -> dict[str, Any]:
+    records = list_file_records(ws)
+    ready = [r for r in records if r["status"] == "ready"]
+    notes = list_notes(ws)
+    return {
+        "files": len(records),
+        "ready_files": len(ready),
+        "pages": sum(r.get("pages", 0) for r in ready),
+        "passages": len(load_blocks(ws)) + len(notes),
+        "notes": len(notes),
+        "folders": len(list_folder_records(ws)),
+        "last_indexed_at": _mtime_iso([ws_dir(ws) / "blocks.json", *notes_dir(ws).glob("*.md")]),
+    }

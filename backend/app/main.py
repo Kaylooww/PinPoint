@@ -48,6 +48,11 @@ class ConnectFolder(BaseModel):
 
 class AskRequest(BaseModel):
     question: str = Field(min_length=1, max_length=1000)
+    thread_id: str | None = Field(default=None, max_length=64)
+
+
+class SaveHistory(BaseModel):
+    saved: bool
 
 
 def _require_workspace(ws: str) -> None:
@@ -100,7 +105,37 @@ async def upload_files(ws: str, files: list[UploadFile] = File(...)) -> list[dic
 @app.post("/api/workspaces/{ws}/ask")
 def ask(ws: str, body: AskRequest) -> dict[str, Any]:
     _require_workspace(ws)
-    return answer.ask(ws, body.question.strip())
+    return answer.ask(ws, body.question.strip(), body.thread_id)
+
+
+@app.get("/api/workspaces/{ws}/history")
+def list_history(ws: str) -> list[dict[str, Any]]:
+    _require_workspace(ws)
+    return [storage.history_item(r) for r in reversed(storage.list_history_records(ws))]
+
+
+@app.get("/api/workspaces/{ws}/history/{history_id}")
+def get_history(ws: str, history_id: str) -> dict[str, Any]:
+    _require_workspace(ws)
+    try:
+        return storage.history_detail(storage.get_history(ws, history_id))
+    except storage.NotFound:
+        raise HTTPException(status_code=404, detail="Not found in history") from None
+
+
+@app.patch("/api/workspaces/{ws}/history/{history_id}")
+def save_history(ws: str, history_id: str, body: SaveHistory) -> dict[str, Any]:
+    _require_workspace(ws)
+    try:
+        return storage.history_item(storage.set_history_saved(ws, history_id, body.saved))
+    except storage.NotFound:
+        raise HTTPException(status_code=404, detail="Not found in history") from None
+
+
+@app.get("/api/workspaces/{ws}/knowledge")
+def knowledge(ws: str) -> dict[str, Any]:
+    _require_workspace(ws)
+    return storage.knowledge_stats(ws)
 
 
 @app.get("/api/workspaces/{ws}/notes")

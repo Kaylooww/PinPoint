@@ -102,9 +102,20 @@ EXPANSION_SYSTEM = (
 )
 
 
-def expand_query(question: str) -> list[str]:
-    """Keywords and synonyms from the LLM. Raises llm.LLMError if the LLM is unavailable."""
-    reply = llm.chat_json(EXPANSION_SYSTEM, question, max_tokens=150)
+def expand_query(question: str, context: list[tuple[str, str]] | None = None) -> list[str]:
+    """Keywords and synonyms from the LLM. Raises llm.LLMError if the LLM is unavailable.
+
+    `context` (earlier questions and answers in the thread) is used only here, to resolve
+    references like "that case"; it is never a source for answers.
+    """
+    user = question
+    if context:
+        earlier = "\n".join(f"Q: {q}\nA: {a}" for q, a in context)
+        user = (
+            f"Earlier in this conversation:\n{earlier}\n\nNew question: {question}\n"
+            "Resolve references in the new question (like \"it\" or \"that case\") and include the resolved names as keywords."
+        )
+    reply = llm.chat_json(EXPANSION_SYSTEM, user, max_tokens=150)
     keywords = reply.get("keywords", [])
     if not isinstance(keywords, list):
         return []

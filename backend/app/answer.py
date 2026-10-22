@@ -10,6 +10,7 @@ from __future__ import annotations
 import re
 import threading
 import time
+import uuid
 from typing import Any
 
 from . import crops, llm, search, storage
@@ -115,10 +116,12 @@ def _extractive(ws: str, question: str, searched_files: int, started: float) -> 
     return _response("answered", answer, citations, searched_files, started, EXTRACTIVE_LABEL)
 
 
-def _generate(ws: str, question: str, searched_files: int, started: float) -> dict[str, Any]:
+def _generate(
+    ws: str, question: str, searched_files: int, started: float, context: list[tuple[str, str]]
+) -> dict[str, Any]:
     """Raises llm.LLMError (except bad JSON, which becomes not_found) so the caller can fall back."""
     try:
-        expansions = search.expand_query(question)
+        expansions = search.expand_query(question, context)
     except llm.LLMBadJSON:
         expansions = []
     hits = search.search(ws, " ".join([question, *expansions]), k=TOP_K)
@@ -154,7 +157,7 @@ def _generate(ws: str, question: str, searched_files: int, started: float) -> di
     return _response("answered", answer, citations, searched_files, started)
 
 
-def ask(ws: str, question: str) -> dict[str, Any]:
+def _answer(ws: str, question: str, context: list[tuple[str, str]]) -> dict[str, Any]:
     started = time.perf_counter()
     file_ids = _ready_file_ids(ws)
     searched_files = len(file_ids)
@@ -162,18 +165,20 @@ def ask(ws: str, question: str) -> dict[str, Any]:
     if not file_ids and not note_ids:
         return _not_found("No files in this workspace are ready yet.", 0, started)
 
+    # Follow-ups depend on the thread, so only stand-alone questions are cached.
     key = (ws, _normalize(question), file_ids + note_ids)
-    with _cache_guard:
-        cached = _cache.get(key)
-    if cached is not None:
-        return {**cached, "elapsed_ms": round((time.perf_counter() - started) * 1000)}
+    if not context:
+        with _cache_guard:
+            cached = _cache.get(key)
+        if cached is not None:
+            return {**cached, "elapsed_ms": round((time.perf_counter() - started) * 1000)}
 
-    cacheable = True
+    cacheable = not context
     if llm.config().provider == "none":
         response = _extractive(ws, question, searched_files, started)
     else:
         try:
-            response = _generate(ws, question, searched_files, started)
+            response = _generate(ws, question, searched_files, started, context)
         except llm.LLMError:
             # LLM down, misconfigured, or timed out: answer from passages, and retry the LLM next time.
             response = _extractive(ws, question, searched_files, started)
@@ -183,3 +188,13 @@ def ask(ws: str, question: str) -> dict[str, Any]:
         with _cache_guard:
             _cache[key] = response
     return response
+
+
+def ask(ws: str, question: str, thread_id: str | None = None) -> dict[str, Any]:
+    """AskResponse plus {thread_id, history_id}; every ask is stored in history."""
+    known = thread_id and any(r["thread_id"] == thread_id for r in storage.list_history_records(ws))
+    thread_id = thread_id if known else uuid.uuid4().hex[:12]
+    context = storage.thread_context(ws, thread_id) if known else []
+    response = _answer(ws, question, context)
+    record = storage.add_history(ws, question, response, thread_id)
+    return {**response, "thread_id": thread_id, "history_id": record["id"]}

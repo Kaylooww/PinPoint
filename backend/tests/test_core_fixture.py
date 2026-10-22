@@ -92,3 +92,32 @@ with TestClient(main.app) as client:
     check("notes empty", client.get(f"/api/workspaces/{WS}/notes").json() == [])
 
 print("note checks passed")
+
+# History, saved answers, follow-up threads, knowledge stats.
+with TestClient(main.app) as client:
+    first = client.post(f"/api/workspaces/{WS}/ask", json={"question": "Who is counsel for the respondent in the Santos case?"}).json()
+    check("ask returns thread_id and history_id", first.get("thread_id") and first.get("history_id"))
+    follow = client.post(
+        f"/api/workspaces/{WS}/ask", json={"question": "When must they file the Answer?", "thread_id": first["thread_id"]}
+    ).json()
+    print("follow-up:", follow["status"], [s["text"] for s in follow["answer"]], follow.get("reason"))
+    check("follow-up stays in the thread", follow["thread_id"] == first["thread_id"])
+    check("follow-up answered from documents", follow["status"] == "answered" and any("March 14" in c["text"] for c in follow["citations"]))
+    fresh = client.post(f"/api/workspaces/{WS}/ask", json={"question": "Any receipts?", "thread_id": "unknown-thread"}).json()
+    check("unknown thread starts a new one", fresh["thread_id"] not in (first["thread_id"], "unknown-thread"))
+
+    history = client.get(f"/api/workspaces/{WS}/history").json()
+    check("history newest first", history[0]["id"] == fresh["history_id"])
+    check("history item shape", set(history[0]) == {"id", "question", "status", "answer_preview", "thread_id", "created_at", "saved"})
+    detail = client.get(f"/api/workspaces/{WS}/history/{first['history_id']}").json()
+    check("history detail has full response", set(detail) == {"question", "response", "thread_id", "created_at", "saved"} and detail["response"]["citations"])
+    saved = client.patch(f"/api/workspaces/{WS}/history/{first['history_id']}", json={"saved": True}).json()
+    check("save answer", saved["saved"] is True and saved["id"] == first["history_id"])
+    check("unknown history 404", client.get(f"/api/workspaces/{WS}/history/nope").status_code == 404)
+
+    stats = client.get(f"/api/workspaces/{WS}/knowledge").json()
+    print("knowledge:", stats)
+    check("knowledge shape", set(stats) == {"files", "ready_files", "pages", "passages", "notes", "folders", "last_indexed_at"})
+    check("knowledge counts", stats["files"] == 2 and stats["ready_files"] == 2 and stats["passages"] == 4 and stats["pages"] == 3)
+
+print("history checks passed")
