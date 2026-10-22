@@ -1,6 +1,63 @@
 # PinPoint — Demo Runbook
 
-For whoever drives the live demo. Everything runs on this laptop; the only outbound call is to the organizers' LLM server.
+For whoever drives the live demo. Everything runs on the demo laptop; the only outbound call is to the organizers' LLM server.
+
+## 0. Setting up a new laptop (once, well before the demo)
+
+Allow 30–45 minutes on good Wi-Fi; most of it is downloads. Tested on macOS (Apple Silicon, 16 GB RAM). Windows is untested: venv activation and the MinerU install differ, so do this a day early there.
+
+**Bring from the laptop that already works** (by USB or AirDrop, never through git or chat):
+- [ ] `backend/.env`: the LLM settings, including the organizers' API key. It is git-ignored on purpose.
+- [ ] The demo files, renamed to read well on screen (e.g. `Lease_Agreement_Scan.pdf`, `Receipt_Photo.jpg`). They go in `backend/demo_files/`, which is also git-ignored because the repo is public.
+
+**Install and set up:**
+1. [ ] Tools (macOS, with [Homebrew](https://brew.sh)):
+   ```sh
+   brew install python@3.12 node uv git
+   ```
+2. [ ] Get the code:
+   ```sh
+   git clone https://github.com/Kaylooww/PinPoint.git && cd PinPoint
+   ```
+3. [ ] Backend environment, plus the files you brought:
+   ```sh
+   cd backend
+   python3.12 -m venv .venv && source .venv/bin/activate
+   pip install -r requirements.txt
+   cp /path/to/copied/.env .env        # or: cp .env.example .env and fill in the OPENAI_COMPAT_* values
+   mkdir -p demo_files && cp /path/to/copied/demo-files/* demo_files/
+   cd ..
+   ```
+4. [ ] Frontend, with mocks **off** (the example file turns them on):
+   ```sh
+   cd frontend && npm install
+   cp .env.example .env.local
+   sed -i '' 's/^VITE_USE_MOCKS=.*/VITE_USE_MOCKS=false/' .env.local
+   cd ..
+   ```
+5. [ ] MinerU, the local document parser (from the repo root):
+   ```sh
+   uv tool install --python 3.12 "mineru>=4.0,<5"
+   uv tool update-shell                 # then close and reopen the terminal, cd back to the repo root
+   mineru version --json
+   mineru server start
+   mineru telemetry disable             # needs the server running; no outbound calls at runtime
+   mineru-kit models download --tier basic     # ~900 MB, the slow step
+   mineru-kit models verify --tier basic
+   mineru config set parse_server.local.managed_tier basic
+   mineru config set parse_server.local.mode managed
+   mineru server restart
+   mineru server status --json          # repeat until parse_server.local.healthy is true
+   ```
+6. [ ] Start the backend and frontend (section 1, terminals 2 and 3), then check:
+   ```sh
+   curl -s http://localhost:8000/api/health
+   ```
+   Expect `"llm": {"ok": true, "mode": "generate", ...}` and `"mineru": {"ok": true, ...}`. If llm isn't ok, check `backend/.env` and the Wi-Fi.
+7. [ ] Load the demo workspace: `cd backend && .venv/bin/python scripts/reset_demo.py` → `Done: N/N files ready`.
+8. [ ] Open http://localhost:5173 and rehearse the whole script (section 3) once, in light and dark mode.
+
+On the day, only sections 1–3 are needed.
 
 ## 1. Start (in this order, three terminals)
 

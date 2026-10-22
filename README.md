@@ -17,9 +17,9 @@ mineru version --json
 mineru server start
 mineru telemetry disable                          # no outbound calls at runtime (needs the server running)
 
-mineru-kit models download --tier standard        # "standard" on Apple Silicon or NVIDIA ≥ 8 GB, else "basic"
-mineru-kit models verify --tier standard
-mineru config set parse_server.local.managed_tier standard
+mineru-kit models download --tier basic           # the tier PinPoint is tested with (~900 MB)
+mineru-kit models verify --tier basic
+mineru config set parse_server.local.managed_tier basic
 mineru config set parse_server.local.mode managed
 mineru server restart
 mineru server status --json                       # wait until the tier is healthy
