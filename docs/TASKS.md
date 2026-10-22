@@ -1,9 +1,10 @@
 # Tasks
 ## Setup
-- [ ] Scaffold, context files, health check, theme tokens
-- [ ] Figma MCP connected and verified
+- [x] Scaffold, context files, health check, theme tokens
+- [x] Figma MCP connected and verified
 ## Backend
-- [ ] llm.py plus a test call
+- [x] llm.py plus a test call
+- [ ] Extractive fallback mode
 - [ ] MinerU sample parse; inspect real JSON
 - [ ] Block extraction and storage
 - [ ] Upload endpoint, background parsing, statuses
@@ -11,7 +12,7 @@
 - [ ] /ask with validation
 - [ ] Crops
 ## Frontend
-- [ ] Tokens, fonts, theme toggle, app shell
+- [x] Tokens, fonts, theme toggle, app shell
 - [ ] Components from Figma
 - [ ] Ask and citation panel (mocks)
 - [ ] Files and upload (mocks)

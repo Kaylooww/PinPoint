@@ -9,7 +9,7 @@ Before any task, read this file, then docs/PRODUCT.md, docs/ARCHITECTURE.md, and
 ## Stack
 - frontend/: React + Vite + TypeScript (strict) + Tailwind CSS + react-router-dom + lucide-react. Fonts self-hosted via @fontsource (Inter, Instrument Serif).
 - backend/: Python 3.12 + FastAPI. MinerU 4.x runs locally for parsing. rank_bm25 for search. Pillow for crops.
-- LLM: Gemma 4 on the organizers' server, called only through backend/app/llm.py (assume an OpenAI-compatible chat completions API; keep it easy to adapt).
+- LLM: switchable via LLM_PROVIDER in backend/.env. Primary: openai_compatible (Claude Haiku via the organizers' Open WebUI server, OpenAI-compatible chat completions). Fallbacks: anthropic (Claude Haiku via the Anthropic API directly) and none (extractive mode, no LLM). Only backend/app/llm.py talks to an LLM.
 
 ## Figma (design source of truth)
 - File key: dEpoBVGwqEwzOmYaKJC750. Frame node ids are listed in docs/DESIGN.md.
@@ -17,12 +17,13 @@ Before any task, read this file, then docs/PRODUCT.md, docs/ARCHITECTURE.md, and
 - Before building any screen, pull its design context and a screenshot, and match them. After building it, compare your result against the screenshot.
 - Figma is a development-time tool only. The running app must never call Figma.
 
-## Commands
-- Backend: cd backend && source .venv/bin/activate && uvicorn app.main:app --reload --port 8000
-- Frontend: cd frontend && npm run dev (http://localhost:5173)
+## Commands (start in this order)
+1. MinerU: mineru server start (check with: mineru server status --json)
+2. Backend: cd backend && source .venv/bin/activate && uvicorn app.main:app --reload --port 8000
+3. Frontend: cd frontend && npm run dev (http://localhost:5173)
 
 ## Hard rules
-1. At runtime, the ONLY outbound network calls allowed are to the Gemma API. No CDNs, Google Fonts, analytics, or other external APIs. Breaking this can disqualify the team.
+1. At runtime, the only network calls allowed are to the configured LLM provider and local services on this machine (the MinerU server). No CDNs, Google Fonts, analytics, or other external APIs. With LLM_PROVIDER=none, the app makes no outbound calls at all. Breaking this can disqualify the team.
 2. Never print or commit API keys. Keys live in backend/.env.
 3. Never guess MinerU's output format. Run it on a real sample file and inspect the JSON before writing any parser.
 4. Answers come only from retrieved document blocks. Every answer sentence must cite at least one source block. Anything unsupported becomes "not_found". Enforce this in code, not only in the prompt.
@@ -33,4 +34,4 @@ Before any task, read this file, then docs/PRODUCT.md, docs/ARCHITECTURE.md, and
 
 ## Conventions
 - Frontend: components in src/components (one per file, PascalCase, named after the Figma components), screens in src/pages, API client in src/lib/api.ts, types in src/lib/types.ts. Mock mode (VITE_USE_MOCKS=true) serves fixtures from src/mocks using the same types.
-- Backend: app/main.py (routes), app/storage.py (folders and JSON), app/parsing.py (MinerU), app/search.py (BM25 and query expansion), app/answer.py (prompting and validation), app/llm.py (Gemma client). Data lives in backend/data/.
+- Backend: app/main.py (routes), app/storage.py (folders and JSON), app/parsing.py (MinerU), app/search.py (BM25 and query expansion), app/answer.py (prompting and validation), app/llm.py (LLM client). Data lives in backend/data/.

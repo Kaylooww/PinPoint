@@ -11,12 +11,18 @@ MinerU (verify every command with --help first):
 - Locator format: doc:{short_id}/tier:{tier}/page:{n}/block:{m}
 
 ## Ask pipeline
-1. Query expansion: Gemma returns 5–10 keywords and synonyms (JSON).
-2. Retrieval: top 8 blocks by BM25 over the question plus the expansions.
-3. Answer: Gemma receives the blocks as b1…b8 and returns JSON only:
+1. Query expansion: the LLM returns 5–10 keywords and synonyms (JSON).
+2. Retrieval: top 6 blocks by BM25 over the question plus the expansions.
+3. Answer: the LLM receives the blocks as b1…b6 and returns JSON only:
    {"status":"answered"|"not_found","answer":[{"text":"...","sources":["b1"]}],"reason":"..."}
 4. Validation in code: drop sentences whose sources aren't in the provided ids. If nothing is left, return not_found. On invalid JSON, retry once with a stricter prompt, then return not_found.
 5. Create (or reuse cached) crops for the cited blocks only.
+
+## LLM modes
+- generate (LLM_PROVIDER is openai_compatible — Claude Haiku via the organizers' Open WebUI server — or anthropic): the LLM does query expansion and writes the cited answer, as described above.
+- extractive (LLM_PROVIDER=none, or automatic when the LLM errors or times out): skip query expansion, run BM25 on the question only, and return the top 1–3 blocks as the answer sentences, each citing its own block, with the label "Showing matching passages." Crops, the citation panel, notes, history, and folders all work the same way.
+- Keep LLM calls small: at most 6 blocks of context, max_tokens 500, short JSON outputs.
+- backend/app/llm.py is the only module that talks to an LLM: chat_json(system, user, max_tokens=500) -> dict, and health() -> {ok, provider, model, latency_ms, mode}. GET /api/health reports llm and mineru status.
 
 ## API contract (frontend/src/lib/types.ts must match)
 GET  /api/health → {"ok": true}
@@ -70,5 +76,5 @@ Citation gains: kind: "file"|"note". crop_url is null for notes.
 backend/data/{ws}/workspace.json, uploads/, parsed/, blocks.json, crops/
 
 ## Environment
-backend/.env: GEMMA_API_BASE, GEMMA_API_KEY, GEMMA_MODEL
+backend/.env: LLM_PROVIDER (openai_compatible | anthropic | none), OPENAI_COMPAT_BASE, OPENAI_COMPAT_KEY, OPENAI_COMPAT_MODEL, ANTHROPIC_API_KEY, ANTHROPIC_MODEL, LLM_TIMEOUT_SECONDS
 frontend/.env.local: VITE_API_BASE, VITE_USE_MOCKS

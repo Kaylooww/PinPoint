@@ -1,4 +1,7 @@
+import { createContext, useContext } from 'react'
+
 export type ThemeChoice = 'light' | 'dark' | 'system'
+export type ResolvedTheme = 'light' | 'dark'
 
 const STORAGE_KEY = 'pinpoint-theme'
 
@@ -21,11 +24,20 @@ export function storeTheme(choice: ThemeChoice): void {
   }
 }
 
-export function resolveTheme(choice: ThemeChoice): 'light' | 'dark' {
-  if (choice !== 'system') return choice
+export function systemTheme(): ResolvedTheme {
   return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'
 }
 
-export function applyTheme(choice: ThemeChoice): void {
-  document.documentElement.classList.toggle('dark', resolveTheme(choice) === 'dark')
+export type ThemeContextValue = {
+  choice: ThemeChoice
+  resolved: ResolvedTheme
+  setChoice: (choice: ThemeChoice) => void
+}
+
+export const ThemeContext = createContext<ThemeContextValue | null>(null)
+
+export function useTheme(): ThemeContextValue {
+  const value = useContext(ThemeContext)
+  if (!value) throw new Error('useTheme must be used inside ThemeProvider')
+  return value
 }

@@ -4,3 +4,4 @@ __pycache__
 backend/data/
 backend/.env
 frontend/.env.local
+backend/samples/
