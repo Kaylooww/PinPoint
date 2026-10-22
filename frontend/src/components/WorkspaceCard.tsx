@@ -17,10 +17,10 @@ function IndustryIcon({ industry }: { industry: string }) {
 }
 
 // Figma "Workspace Card" (4:51).
-export function WorkspaceCard({ workspace }: { workspace: Workspace }) {
+export function WorkspaceCard({ workspace, to }: { workspace: Workspace; to?: string }) {
   return (
     <Link
-      to={`/w/${workspace.id}/ask`}
+      to={to ?? `/w/${workspace.id}/ask`}
       className="flex flex-col gap-3.5 rounded-card border border-border bg-surface p-5 shadow-subtle hover:border-accent"
     >
       <div className="flex items-center justify-between">
