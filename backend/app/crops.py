@@ -72,6 +72,8 @@ def _crop_from_page(page: Path, bbox: list[float], out: Path) -> bool:
 
 
 def ensure_crop(ws: str, block: dict[str, Any]) -> Path | None:
+    if not block["locator"].startswith("doc:"):  # notes and plain-text files have no page image
+        return None
     out = storage.crops_dir(ws) / f"{block['id']}.png"
     if out.exists():
         return out

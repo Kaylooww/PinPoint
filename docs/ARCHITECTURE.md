@@ -8,7 +8,8 @@ MinerU (verify every command with --help first):
 - Parse: mineru parse "<file>" --pages all --json (by default only the first 10 PDF pages are parsed)
 - Block crop: mineru read "<block locator>" --format image --output <path>.png
 - Fallback crop: render the page image with mineru read "<page locator>" --format image, then crop it with Pillow using the block's bbox. If that also fails, use the page image.
-- Locator format: doc:{short_id}/tier:{tier}/page:{n}/block:{m}
+- Locator format: doc:{short_id}/tier:{tier}/page:{n}/block:{m}. Block m is the m-th blank-line-separated paragraph of page n in the parse output's markdown (a table is one block). Tier: basic (MINERU_TIER).
+- Non-PDF files are parsed without --pages (MinerU rejects it). Plain-text files (md, txt, csv) skip MinerU, which refuses them: one block per paragraph, locator text:{file_id}/page:1/block:{m}, and crop_url null (the UI shows the text).
 
 ## Ask pipeline
 1. Query expansion: the LLM returns 5–10 keywords and synonyms (JSON).
@@ -70,7 +71,7 @@ Note: {id, text, created_at}
 Folder: {id, path, file_count, status: "scanning"|"ready"|"failed", last_scanned_at, error?}
 KnowledgeStats: {files, ready_files, pages, passages, notes, folders, last_indexed_at}
 FileItem gains: source: "upload"|"folder", source_path?
-Citation gains: kind: "file"|"note". crop_url is null for notes.
+Citation gains: kind: "file"|"note". crop_url is null for notes and plain-text files.
 
 ## Data layout
 backend/data/{ws}/workspace.json, uploads/, parsed/, blocks.json, crops/

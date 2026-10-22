@@ -7,7 +7,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
 
-from . import answer, crops, llm, parsing, search, storage
+from . import answer, crops, folders, llm, parsing, search, storage
 
 MAX_UPLOAD_BYTES = 50 * 1024 * 1024
 
@@ -19,6 +19,7 @@ async def lifespan(_: FastAPI) -> AsyncIterator[None]:
     for ws in storage.workspace_ids():
         search.rebuild(ws)
         parsing.resume_interrupted(ws)
+        folders.resume(ws)
     yield
 
 
@@ -41,8 +42,17 @@ class CreateNote(BaseModel):
     text: str = Field(min_length=1, max_length=4000)
 
 
+class ConnectFolder(BaseModel):
+    path: str = Field(min_length=1, max_length=1024)
+
+
 class AskRequest(BaseModel):
     question: str = Field(min_length=1, max_length=1000)
+    thread_id: str | None = Field(default=None, max_length=64)
+
+
+class SaveHistory(BaseModel):
+    saved: bool
 
 
 def _require_workspace(ws: str) -> None:
@@ -95,7 +105,37 @@ async def upload_files(ws: str, files: list[UploadFile] = File(...)) -> list[dic
 @app.post("/api/workspaces/{ws}/ask")
 def ask(ws: str, body: AskRequest) -> dict[str, Any]:
     _require_workspace(ws)
-    return answer.ask(ws, body.question.strip())
+    return answer.ask(ws, body.question.strip(), body.thread_id)
+
+
+@app.get("/api/workspaces/{ws}/history")
+def list_history(ws: str) -> list[dict[str, Any]]:
+    _require_workspace(ws)
+    return [storage.history_item(r) for r in reversed(storage.list_history_records(ws))]
+
+
+@app.get("/api/workspaces/{ws}/history/{history_id}")
+def get_history(ws: str, history_id: str) -> dict[str, Any]:
+    _require_workspace(ws)
+    try:
+        return storage.history_detail(storage.get_history(ws, history_id))
+    except storage.NotFound:
+        raise HTTPException(status_code=404, detail="Not found in history") from None
+
+
+@app.patch("/api/workspaces/{ws}/history/{history_id}")
+def save_history(ws: str, history_id: str, body: SaveHistory) -> dict[str, Any]:
+    _require_workspace(ws)
+    try:
+        return storage.history_item(storage.set_history_saved(ws, history_id, body.saved))
+    except storage.NotFound:
+        raise HTTPException(status_code=404, detail="Not found in history") from None
+
+
+@app.get("/api/workspaces/{ws}/knowledge")
+def knowledge(ws: str) -> dict[str, Any]:
+    _require_workspace(ws)
+    return storage.knowledge_stats(ws)
 
 
 @app.get("/api/workspaces/{ws}/notes")
@@ -120,6 +160,40 @@ def delete_note(ws: str, note_id: str) -> dict[str, bool]:
     except storage.NotFound:
         raise HTTPException(status_code=404, detail="Note not found") from None
     search.rebuild(ws)
+    return {"ok": True}
+
+
+@app.get("/api/workspaces/{ws}/folders")
+def list_folders(ws: str) -> list[dict[str, Any]]:
+    _require_workspace(ws)
+    return [storage.folder_view(ws, f) for f in storage.list_folder_records(ws)]
+
+
+@app.post("/api/workspaces/{ws}/folders")
+def connect_folder(ws: str, body: ConnectFolder) -> dict[str, Any]:
+    _require_workspace(ws)
+    try:
+        return folders.connect(ws, body.path)
+    except folders.FolderError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from None
+
+
+@app.post("/api/workspaces/{ws}/folders/{folder_id}/rescan")
+def rescan_folder(ws: str, folder_id: str) -> dict[str, Any]:
+    _require_workspace(ws)
+    try:
+        return folders.rescan(ws, folder_id)
+    except storage.NotFound:
+        raise HTTPException(status_code=404, detail="Folder not found") from None
+
+
+@app.delete("/api/workspaces/{ws}/folders/{folder_id}")
+def disconnect_folder(ws: str, folder_id: str) -> dict[str, bool]:
+    _require_workspace(ws)
+    try:
+        folders.disconnect(ws, folder_id)
+    except storage.NotFound:
+        raise HTTPException(status_code=404, detail="Folder not found") from None
     return {"ok": True}
 
 

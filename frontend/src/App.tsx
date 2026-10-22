@@ -12,7 +12,9 @@ import { WorkspacesPage } from './pages/WorkspacesPage'
 export default function App() {
   return (
     <Routes>
-      <Route path="/" element={<LandingPage />} />
+      {/* Temporary for the demo: "/" opens the Ask tab of the demo workspace. */}
+      <Route path="/" element={<Navigate to="/w/reyes-partners/ask" replace />} />
+      <Route path="/landing" element={<LandingPage />} />
       <Route path="/signin" element={<SignInPage />} />
       <Route element={<AppShell />}>
         <Route path="/workspaces" element={<WorkspacesPage />} />

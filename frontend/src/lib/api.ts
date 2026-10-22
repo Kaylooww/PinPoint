@@ -1,5 +1,15 @@
 import * as mock from '../mocks/server'
-import type { CreateWorkspaceRequest, Workspace } from './types'
+import type {
+  AskResult,
+  CreateWorkspaceRequest,
+  FileItem,
+  Folder,
+  HistoryDetail,
+  HistoryItem,
+  KnowledgeStats,
+  Note,
+  Workspace,
+} from './types'
 
 export const USE_MOCKS = import.meta.env.VITE_USE_MOCKS === 'true'
 const API_BASE = (import.meta.env.VITE_API_BASE ?? 'http://localhost:8000').replace(/\/$/, '')
@@ -56,4 +66,65 @@ export const api = {
 
   createWorkspace: (body: CreateWorkspaceRequest): Promise<Workspace> =>
     USE_MOCKS ? mock.createWorkspace(body) : request('/api/workspaces', json('POST', body)),
+
+  listFiles: (ws: string): Promise<FileItem[]> =>
+    USE_MOCKS ? mock.listFiles(ws) : request(`/api/workspaces/${encodeURIComponent(ws)}/files`),
+
+  uploadFiles: (ws: string, files: File[]): Promise<FileItem[]> => {
+    if (USE_MOCKS) return mock.uploadFiles(ws, files)
+    const body = new FormData()
+    for (const file of files) body.append('files', file, file.name)
+    return request(`/api/workspaces/${encodeURIComponent(ws)}/files`, { method: 'POST', body })
+  },
+
+  ask: (ws: string, question: string, threadId?: string): Promise<AskResult> =>
+    USE_MOCKS
+      ? mock.ask(ws, question, threadId)
+      : request(
+          `/api/workspaces/${encodeURIComponent(ws)}/ask`,
+          json('POST', threadId ? { question, thread_id: threadId } : { question }),
+        ),
+
+  listNotes: (ws: string): Promise<Note[]> =>
+    USE_MOCKS ? mock.listNotes(ws) : request(`/api/workspaces/${encodeURIComponent(ws)}/notes`),
+
+  addNote: (ws: string, text: string): Promise<Note> =>
+    USE_MOCKS ? mock.addNote(ws, text) : request(`/api/workspaces/${encodeURIComponent(ws)}/notes`, json('POST', { text })),
+
+  deleteNote: async (ws: string, noteId: string): Promise<void> => {
+    if (USE_MOCKS) return mock.deleteNote(ws, noteId)
+    await request(`/api/workspaces/${encodeURIComponent(ws)}/notes/${encodeURIComponent(noteId)}`, { method: 'DELETE' })
+  },
+
+  listFolders: (ws: string): Promise<Folder[]> =>
+    USE_MOCKS ? mock.listFolders(ws) : request(`/api/workspaces/${encodeURIComponent(ws)}/folders`),
+
+  connectFolder: (ws: string, path: string): Promise<Folder> =>
+    USE_MOCKS ? mock.connectFolder(ws, path) : request(`/api/workspaces/${encodeURIComponent(ws)}/folders`, json('POST', { path })),
+
+  rescanFolder: (ws: string, folderId: string): Promise<Folder> =>
+    USE_MOCKS
+      ? mock.rescanFolder(ws, folderId)
+      : request(`/api/workspaces/${encodeURIComponent(ws)}/folders/${encodeURIComponent(folderId)}/rescan`, { method: 'POST' }),
+
+  disconnectFolder: async (ws: string, folderId: string): Promise<void> => {
+    if (USE_MOCKS) return mock.disconnectFolder(ws, folderId)
+    await request(`/api/workspaces/${encodeURIComponent(ws)}/folders/${encodeURIComponent(folderId)}`, { method: 'DELETE' })
+  },
+
+  listHistory: (ws: string): Promise<HistoryItem[]> =>
+    USE_MOCKS ? mock.listHistory(ws) : request(`/api/workspaces/${encodeURIComponent(ws)}/history`),
+
+  getHistory: (ws: string, historyId: string): Promise<HistoryDetail> =>
+    USE_MOCKS
+      ? mock.getHistory(ws, historyId)
+      : request(`/api/workspaces/${encodeURIComponent(ws)}/history/${encodeURIComponent(historyId)}`),
+
+  setSaved: (ws: string, historyId: string, saved: boolean): Promise<HistoryItem> =>
+    USE_MOCKS
+      ? mock.setSaved(ws, historyId, saved)
+      : request(`/api/workspaces/${encodeURIComponent(ws)}/history/${encodeURIComponent(historyId)}`, json('PATCH', { saved })),
+
+  knowledge: (ws: string): Promise<KnowledgeStats> =>
+    USE_MOCKS ? mock.knowledge(ws) : request(`/api/workspaces/${encodeURIComponent(ws)}/knowledge`),
 }
