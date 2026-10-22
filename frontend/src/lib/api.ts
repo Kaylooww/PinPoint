@@ -1,5 +1,5 @@
 import * as mock from '../mocks/server'
-import type { CreateWorkspaceRequest, Workspace } from './types'
+import type { AskResponse, CreateWorkspaceRequest, FileItem, Workspace } from './types'
 
 export const USE_MOCKS = import.meta.env.VITE_USE_MOCKS === 'true'
 const API_BASE = (import.meta.env.VITE_API_BASE ?? 'http://localhost:8000').replace(/\/$/, '')
@@ -56,4 +56,19 @@ export const api = {
 
   createWorkspace: (body: CreateWorkspaceRequest): Promise<Workspace> =>
     USE_MOCKS ? mock.createWorkspace(body) : request('/api/workspaces', json('POST', body)),
+
+  listFiles: (ws: string): Promise<FileItem[]> =>
+    USE_MOCKS ? mock.listFiles(ws) : request(`/api/workspaces/${encodeURIComponent(ws)}/files`),
+
+  uploadFiles: (ws: string, files: File[]): Promise<FileItem[]> => {
+    if (USE_MOCKS) return mock.uploadFiles(ws, files)
+    const body = new FormData()
+    for (const file of files) body.append('files', file, file.name)
+    return request(`/api/workspaces/${encodeURIComponent(ws)}/files`, { method: 'POST', body })
+  },
+
+  ask: (ws: string, question: string): Promise<AskResponse> =>
+    USE_MOCKS
+      ? mock.ask(ws, question)
+      : request(`/api/workspaces/${encodeURIComponent(ws)}/ask`, json('POST', { question })),
 }

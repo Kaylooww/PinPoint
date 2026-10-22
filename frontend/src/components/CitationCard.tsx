@@ -1,0 +1,33 @@
+import { FileText } from 'lucide-react'
+import type { Citation } from '../lib/types'
+import { CropImage } from './CropImage'
+
+type CitationCardProps = {
+  citation: Citation
+  onOpen: (citation: Citation) => void
+  active?: boolean
+}
+
+// Figma "Citation Card" (4:72): crop on top, numbered footer with file and page.
+export function CitationCard({ citation, onOpen, active = false }: CitationCardProps) {
+  return (
+    <button
+      type="button"
+      onClick={() => onOpen(citation)}
+      aria-label={`Open source ${citation.number}: ${citation.file_name}, page ${citation.page}`}
+      className={`flex w-[264px] flex-col overflow-hidden rounded-card border bg-surface text-left hover:border-accent ${
+        active ? 'border-accent' : 'border-border'
+      }`}
+    >
+      <CropImage citation={citation} />
+      <div className="flex w-full items-center gap-2 border-t border-border px-3.5 py-2.5">
+        <span className="flex size-[18px] shrink-0 items-center justify-center rounded-pill bg-accent-soft text-label text-accent">
+          {citation.number}
+        </span>
+        <FileText size={14} strokeWidth={1.75} className="shrink-0 text-muted" />
+        <span className="min-w-0 flex-1 truncate text-label text-text">{citation.file_name}</span>
+        <span className="shrink-0 text-label text-muted">p. {citation.page}</span>
+      </div>
+    </button>
+  )
+}
