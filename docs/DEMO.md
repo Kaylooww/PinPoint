@@ -22,7 +22,7 @@ Fresh demo workspace (wipes and rebuilds Reyes & Partners, waits until every fil
 cd backend && .venv/bin/python scripts/reset_demo.py
 ```
 
-It uses `backend/demo_files/`, or `backend/samples/` if that folder is missing or empty.
+It uses `backend/demo_files/`, or `backend/samples/` if that folder is missing or empty. File names show in the UI as-is, so give demo files readable names (e.g. `Lease_Agreement_Scan.pdf`, `Receipt_Photo.jpg`).
 
 ## 2. Pre-demo checklist (15 minutes before)
 
@@ -34,6 +34,7 @@ It uses `backend/demo_files/`, or `backend/samples/` if that folder is missing o
 - [ ] Answer cache warmed: run every question in `docs/DEMO_QUESTIONS.md` once (or `scripts/warm_cache.py` once it exists). Warm answers come back instantly, and their crops are already on disk.
 - [ ] The file to upload live is on the Desktop (a photo or PDF not already in the workspace).
 - [ ] Theme set to Light; dark mode is shown during the demo.
+- [ ] No git checkout or pull in this folder while the servers run (it can stall Vite's Tailwind step; see fallback plan).
 - [ ] Backup video open in another window.
 
 ## 3. Click-by-click script (about 3 minutes)
@@ -47,7 +48,7 @@ The questions below are verified against the current sample files. Swap in the f
    *"How much is the penalty if the rented car is taken outside Cebu?"*
    → Answer with numbered citations [1] [2], from the scanned contract.
 5. **Show the proof.** Click citation **[1]**. The panel shows the highlighted crop of the exact paragraph, the file and page, and the extracted text. Press **Esc**.
-6. **Follow-up.** Click **Ask a follow-up** and type *"Who is the renter?"* → it answers in the same thread.
+6. **Follow-up.** Click **Ask a follow-up** and type *"Who is the renter named in that agreement?"* → it answers in the same thread. (Avoid bare one-word follow-ups like "Who is the renter?": "renter" is in almost every clause, so retrieval can miss the paragraph and the answer is Not found.)
 7. **Save.** Click **Save** on the first answer. Open **Memory → Saved answers** to show it is kept, plus the full **History**.
 8. **A question that needs the photo.** Back on **Ask**, click **New question**:
    *"What is the invoice number on the receipt?"* → `00544947`, cited from the phone photo.
@@ -62,6 +63,7 @@ The questions below are verified against the current sample files. Swap in the f
 | Venue Wi-Fi down, or the LLM server errors or is slow | Nothing to do live: answers automatically switch to **extractive mode** ("Showing matching passages") with the same citations and crops. To force it for the rest of the demo, set `LLM_PROVIDER=none` in `backend/.env` and restart the backend; this makes no outbound calls at all. |
 | A live upload fails or takes too long | Skip it. The pre-loaded files already cover every question. |
 | MinerU stops | Already-parsed files and warmed answers keep working (the index and crops are on disk). Only new uploads need MinerU: run `mineru server restart`. |
+| The page suddenly has no styling (giant icons, plain text) | Vite's Tailwind step stalled after files changed under it (for example a git checkout while it was running). Stop `npm run dev` and start it again, then reload the browser. |
 | Backend crashes | Restart it with the command above. All workspaces, files, notes, and history reload from `backend/data/`. |
 | The demo workspace looks wrong | `cd backend && .venv/bin/python scripts/reset_demo.py` (about 10 s with cached parses), then re-warm the cache. |
 | Anything else | Switch to the backup video. |

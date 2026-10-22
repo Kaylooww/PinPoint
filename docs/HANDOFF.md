@@ -1,6 +1,6 @@
 # PinPoint — Handoff
 
-Last updated: Thursday 14:00, Phase E step 22 (DEMO.md draft). Branch: demo-prep.
+Last updated: Thursday 14:05, Phase E full demo run done. Branch: demo-prep.
 
 ## Done (and tested)
 - Phase A 1–6: backend core on MinerU **basic** tier; both samples parse to ready; crops; API end-to-end.
@@ -14,12 +14,13 @@ Last updated: Thursday 14:00, Phase E step 22 (DEMO.md draft). Branch: demo-prep
 
 ## In progress
 - Phase E (started early; 18b Landing/Sign in comes as a patch from another session — don't touch LandingPage.tsx, SignInPage.tsx, or the routes in App.tsx).
+- Full demo run (light + dark) against the real backend: all steps pass after two fixes — (1) crops were unreadable (wide paragraph strips shrank to ~25 px): cards now fit the crop's height and show the start of the passage; the panel is 560 px wide and very wide strips keep a 112 px height and scroll sideways; (2) the DEMO.md follow-up "Who is the renter?" returned Not found ("renter" is in nearly every clause) → script now uses "Who is the renter named in that agreement?".
 - Step 22 drafted: docs/DEMO.md (start order, checklist, click-by-click script with questions verified on the samples, fallback plan). Swap in docs/DEMO_QUESTIONS.md when it exists.
 - Step 19 done: `backend/scripts/reset_demo.py` rebuilds Reyes & Partners and waits until all files are ready. backend/demo_files/ doesn't exist yet, so it uses backend/samples/ (2 files, 3 pages).
 - Phase D frontend halves, in order 13 → 18.
 
 ## Exact next step
-- Full demo run against the real backend in light and dark (upload → ready → ask → cited answer → crops → panel → follow-up → save → not-found); fix only real bugs. Then step 20 once docs/DEMO_QUESTIONS.md exists.
+- Step 20 once docs/DEMO_QUESTIONS.md exists: warm the cache with those questions (and re-check each answer). Put the final demo files, with readable names, in backend/demo_files/ and rerun scripts/reset_demo.py first.
 
 ## How to run
 ```sh
@@ -32,6 +33,8 @@ Reset the demo workspace (servers running): `cd backend && .venv/bin/python scri
 Tests (throwaway data dir): `cd backend && .venv/bin/python tests/test_core_fixture.py` and `.venv/bin/python tests/test_folders.py`. Add `LLM_PROVIDER=none` to test extractive mode.
 
 ## Known issues
+- A git checkout/pull in this folder while `npm run dev` runs can stall Vite's Tailwind step (pages lose all styling). Fix: restart `npm run dev`. Happened once at 13:54.
+- Bare follow-ups with only a very common word ("Who is the renter?") can retrieve the wrong passages and return Not found.
 - Figma MCP (claude.ai connector) disconnected at 13:35; new screens reuse existing components until it is re-authenticated.
 - Browser walkthrough driver (CDP, no deps) lives in the agent scratchpad, not the repo.
 - Start `mineru server` from a stable directory: its managed parse service writes `.mineru-service.lock` and `blobs/` into the current directory (both git-ignored).
