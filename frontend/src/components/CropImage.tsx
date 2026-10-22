@@ -12,33 +12,26 @@ type CropImageProps = {
 // Falls back to the extracted text (Instrument Serif, highlighted) when there is no image.
 export function CropImage({ citation, size = 'card' }: CropImageProps) {
   const [failed, setFailed] = useState(false)
-  const [wide, setWide] = useState(false)
+  const [landscape, setLandscape] = useState(true)
   const showImage = citation.crop_url && !failed
 
   if (showImage) {
+    // The whole crop is always visible: it scales down to fit (contain), never clipped.
+    // Card: fits the card width and at most 160px tall. Panel: wide crops use the panel
+    // width, tall ones (a receipt photo) fit 60% of the viewport height.
     return (
-      <div
-        className={`flex bg-surface-muted ${
-          size === 'card'
-            ? 'h-[112px] items-center justify-start overflow-hidden p-3'
-            : wide
-              ? 'items-center justify-start overflow-x-auto p-5'
-              : 'items-center justify-center p-5'
-        }`}
-      >
-        {/* Crops are often wide, short paragraph strips: in a card, fit the height and show the
-            start of the passage at a readable size; in the panel, very wide strips keep a readable height and scroll sideways. */}
+      <div className={`flex bg-surface-muted ${size === 'card' ? 'items-start justify-start p-3' : 'items-center justify-center p-5'}`}>
         <img
           src={assetUrl(citation.crop_url!)}
           alt={`Source ${citation.number}: ${citation.file_name}, page ${citation.page}`}
           onError={() => setFailed(true)}
-          onLoad={(e) => setWide(e.currentTarget.naturalWidth > 4 * e.currentTarget.naturalHeight)}
-          className={`rounded-[4px] bg-surface ring-2 ring-highlight ${
+          onLoad={(e) => setLandscape(e.currentTarget.naturalWidth >= e.currentTarget.naturalHeight)}
+          className={`block h-auto rounded-[4px] bg-surface object-contain object-left-top ring-2 ring-highlight ${
             size === 'card'
-              ? 'h-full w-auto max-w-none'
-              : wide
-                ? 'h-[112px] w-auto max-w-none border border-border'
-                : 'max-h-[60vh] w-full border border-border object-contain'
+              ? 'max-h-[160px] w-auto max-w-full'
+              : landscape
+                ? 'max-h-[60vh] w-full border border-border'
+                : 'max-h-[60vh] w-auto max-w-full border border-border'
           }`}
         />
       </div>

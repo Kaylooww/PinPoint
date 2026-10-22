@@ -1,6 +1,6 @@
 # PinPoint — Handoff
 
-Last updated: Thursday 15:40, fast parsing (flash tier for digital PDFs). Branch: fast-parsing (stacked on folder-picker / PR #8).
+Last updated: Thursday 15:45, full crops on citation cards. Branch: full-crops (stacked on fast-parsing / PR #9).
 
 ## Done (and tested)
 - Phase A 1–6: backend core on MinerU **basic** tier; both samples parse to ready; crops; API end-to-end.
@@ -13,6 +13,7 @@ Last updated: Thursday 15:40, fast parsing (flash tier for digital PDFs). Branch
 - Phase D 17: knowledge stats strip at the top of the Files tab (GET /knowledge), refreshed when files change. Browser-checked against the API.
 
 ## In progress
+- Full crops DONE (frontend only): citation cards show the entire crop, scaled to fit (max 160px tall, never clipped; replaces the earlier "fit height, show the start" behavior); with 1–2 citations cards grow to 480px, with 3+ they keep the 264px row; the panel shows the full crop at panel width (tall crops fit 60vh), no sideways scroll. Browser-checked: Constitution Section 24 (wide), receipt photo (tall), Northwind strip, and a 3-citation answer; image inside its card with its natural aspect ratio in every case, light and dark.
 - Fast parsing DONE: digital PDFs and Office/HTML → MinerU flash; scans/images → basic; flash failure → basic. After the one restart, Rules of Court (folder file) was requeued and parsed on flash in 39.5 s (196 pages); the uploaded Constitution on flash in 3.4 s (53 pages); a new photo on basic in 3.2 s. Questions on both cite with crops (HTTP 200). Embedding moved off the parse thread (it held the queue ~3 min after Rules of Court). Nothing was deleted or re-parsed; ready files untouched. pypdf added to the backend venv.
 - Folder picker DONE: POST /api/system/pick-folder (localhost only; osascript on macOS, PowerShell FolderBrowserDialog on Windows; returns the path or null on cancel; 501 elsewhere) and a Browse… button in Connect a local folder (Choosing… while open; muted fallback hint on failure; mock returns a sample path). Tested: tests/test_picker.py (OS dialog faked) and in the browser with the picker response intercepted — cancel, 501, chosen path → connect → 4 files Ready → answer cites a folder file; light and dark. The real Finder dialog itself must be tried by a person (automation can't click it).
 - Final run (both clients, light + dark, real backend): 11/11 DEMO.md questions over the API; browser: Select client, upload → ready, "Who is the renter?" cited with crops, panel excerpt, modal at the cited page with outline, zoom, Esc, follow-up, not-found, Memory auto-saved, letter date (March 2, 2026), August 15 invoice → Did you mean + closest passages → suggestion answers 24,640.00, Ask about this document with citation outline. One real bug fixed in the run: near matches only looked at the 12 context blocks, so a suggestion naming the invoice number was dropped; they now cover facts from all blocks of the retrieved files (facts still verified verbatim), ties to LLM-named passages then rank.

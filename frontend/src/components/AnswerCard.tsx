@@ -77,7 +77,13 @@ export function AnswerCard({ response, activeCitationId, onOpenCitation, onFollo
       <p className="text-eyebrow text-muted uppercase">Sources</p>
       <div className="flex flex-wrap gap-3">
         {response.citations.map((c) => (
-          <CitationCard key={c.id} citation={c} onOpen={onOpenCitation} active={c.id === activeCitationId} />
+          <CitationCard
+            key={c.id}
+            citation={c}
+            onOpen={onOpenCitation}
+            active={c.id === activeCitationId}
+            wide={response.citations.length <= 2}
+          />
         ))}
       </div>
 
