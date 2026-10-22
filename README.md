@@ -87,3 +87,6 @@ A 14-day free trial lets firms try it on their own files before paying.
 1. Pilot with 3–5 local firms in Cebu (law, accounting, real estate) and measure time saved per question.
 2. Add automatic folder sync, team accounts with permissions, and contract version comparison.
 3. Launch the paid Starter and Team plans, priced from the pilot feedback.
+
+## Demo video
+https://www.youtube.com/watch?v=1GbLXRP_tac
