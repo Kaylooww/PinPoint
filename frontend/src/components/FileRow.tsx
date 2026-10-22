@@ -36,12 +36,16 @@ export function FileRow({ file, onOpen }: { file: FileItem; onOpen?: (file: File
         {file.status === 'failed' ? (
           <p className="text-small text-danger">{file.error ?? "Couldn't read this file."}</p>
         ) : (
+          <>
           <p className="flex min-w-0 items-center gap-1.5 truncate text-small text-muted">
             {file.source === 'folder' && (
               <span className="rounded-control border border-border px-1.5 text-label">Folder</span>
             )}
             {fileMeta(file)}
           </p>
+          {/* A ready file can carry a note, e.g. pages that couldn't be read. */}
+          {file.status === 'ready' && file.error && <p className="truncate text-small text-warning">{file.error}</p>}
+          </>
         )}
       </div>
       {file.status === 'parsing' && (

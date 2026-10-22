@@ -36,7 +36,7 @@ def main() -> int:
                     blocks, _ = parsing.text_file_blocks(record["path"], record["id"], record["name"])
                 else:
                     raw = json.loads((storage.parsed_dir(ws) / f"{record['id']}.json").read_text(encoding="utf-8"))
-                    blocks, _ = parsing.extract_blocks(raw, record["id"], record["name"])
+                    blocks, _ = parsing.extract_saved(raw, record["id"], record["name"])
             except (OSError, ValueError, parsing.ParseError) as e:
                 print(f"  {ws}: kept old blocks for {record['name']} ({type(e).__name__})")
                 blocks = [b for b in old if b["file_id"] == record["id"]]

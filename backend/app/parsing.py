@@ -8,6 +8,7 @@ import os
 import re
 import shutil
 import subprocess
+import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
@@ -75,6 +76,46 @@ def server_status() -> dict[str, Any]:
     return {"ok": True, "status": status}
 
 
+CHUNK_PAGES = 20
+CHUNK_THRESHOLD = 40  # PDFs longer than this are parsed in chunks of CHUNK_PAGES
+CHUNK_WAIT_SECONDS = 600
+STALL_SECONDS = 600  # no progress for 10 minutes: requeue once, then fail
+PASSWORD_MESSAGE = "This PDF is password-protected. Unlock it, then upload it again."
+
+
+def prepare_pdf(ws: str, file_id: str, path: str) -> str:
+    """The path to parse. Encrypted PDFs that open without a password (owner restrictions
+    only, e.g. copying disabled) get a decrypted working copy in parsed/; the user's file
+    is never modified. Page numbers are unchanged. Raises ParseError if a password is needed."""
+    if not path.lower().endswith(".pdf"):
+        return path
+    try:
+        from pypdf import PdfReader, PdfWriter
+        from pypdf.errors import FileNotDecryptedError, PdfReadError
+
+        try:
+            reader = PdfReader(path)  # tries the empty user password itself
+        except FileNotDecryptedError as e:
+            raise ParseError(PASSWORD_MESSAGE) from e
+        if not reader.is_encrypted:
+            return path
+        if not reader.decrypt(""):
+            raise ParseError(PASSWORD_MESSAGE)
+        copy = storage.parsed_dir(ws) / f"{file_id}.decrypted.pdf"
+        copy.parent.mkdir(parents=True, exist_ok=True)
+        PdfWriter(clone_from=reader).write(str(copy))
+        log.info("decrypted working copy for %s (owner restrictions only)", file_id)
+        return str(copy)
+    except ParseError:
+        raise
+    except PdfReadError as e:
+        if "password" in str(e).lower() or "decrypt" in str(e).lower():
+            raise ParseError(PASSWORD_MESSAGE) from e
+        return path  # let MinerU try; it reports its own errors
+    except Exception:  # noqa: BLE001 - unreadable here means "let MinerU OCR it"
+        return path
+
+
 def pdf_info(path: str) -> tuple[int, bool]:
     """(page count, has a text layer) for a PDF; (0, False) if it can't be read."""
     try:
@@ -101,12 +142,13 @@ def choose_tier(path: str) -> tuple[str, int]:
     return MINERU_TIER, 0
 
 
-def parse_file(path: str, tier: str = MINERU_TIER) -> dict[str, Any]:
-    """Raw `mineru parse --json` output for one file (all pages)."""
-    args = ["parse", path, "--tier", tier, "--json", "--wait", str(PARSE_WAIT_SECONDS), "--limit", "50000000"]
+def parse_file(path: str, tier: str = MINERU_TIER, pages: str = "all") -> dict[str, Any]:
+    """Raw `mineru parse --json` output for one file (all pages, or a range like "21-40")."""
+    wait = PARSE_WAIT_SECONDS if pages == "all" else CHUNK_WAIT_SECONDS
+    args = ["parse", path, "--tier", tier, "--json", "--wait", str(wait), "--limit", "50000000"]
     if path.lower().endswith(".pdf"):
-        args += ["--pages", "all"]  # MinerU rejects --pages for non-PDF files
-    proc = run_mineru(args, timeout=PARSE_WAIT_SECONDS + 60)
+        args += ["--pages", pages]  # MinerU rejects --pages for non-PDF files
+    proc = run_mineru(args, timeout=wait + 60)
     try:
         raw = json.loads(proc.stdout)
     except json.JSONDecodeError as e:
@@ -141,6 +183,25 @@ def _clean_text(line: str) -> str:
     return re.sub(r"\s{2,}", " ", EMPHASIS.sub("", line)).strip()
 
 
+HTML_ROW = re.compile(r"<tr[^>]*>(.*?)</tr>", re.IGNORECASE | re.DOTALL)
+HTML_CELL = re.compile(r"<t[dh][^>]*>(.*?)</t[dh]>", re.IGNORECASE | re.DOTALL)
+HTML_TAG = re.compile(r"<[^>]+>")
+
+
+def _html_table_rows(markup: str) -> list[list[str]] | None:
+    """Rows of cells from an HTML <table> (MinerU's basic tier writes tables this way)."""
+    if "<table" not in markup.lower():
+        return None
+    import html
+
+    rows = []
+    for row in HTML_ROW.findall(markup):
+        cells = [_clean_text(html.unescape(HTML_TAG.sub(" ", c))) for c in HTML_CELL.findall(row)]
+        if any(cells):
+            rows.append(cells)
+    return rows or None
+
+
 def _table_rows(markdown: str) -> list[list[str]] | None:
     """Rows of cells if the block is a markdown table (rule rows dropped), else None."""
     lines = [ln for ln in markdown.splitlines() if ln.strip()]
@@ -151,6 +212,11 @@ def _table_rows(markdown: str) -> list[list[str]] | None:
 
 
 def _clean_block(markdown: str) -> str:
+    html_rows = _html_table_rows(markdown)
+    if html_rows:
+        before = _clean_text(HTML_TAG.sub(" ", markdown.split("<table", 1)[0]))
+        rows = [" · ".join(c for c in row if c) for row in html_rows]
+        return "\n".join([before, *rows] if before else rows)
     lines = []
     for line in HTML_COMMENT.sub("", markdown).splitlines():
         if TABLE_RULE.match(line):
@@ -254,7 +320,23 @@ def add_breadcrumbs(blocks: list[dict[str, Any]]) -> None:
         block["heading_ids"] = [open_headings[lv][1] for lv in levels]
 
 
-def extract_blocks(raw: dict[str, Any], file_id: str, file_name: str) -> tuple[list[dict[str, Any]], int]:
+def extract_saved(raw: dict[str, Any], file_id: str, file_name: str) -> tuple[list[dict[str, Any]], int]:
+    """Blocks from a saved parse: one MinerU output, or {"chunks": [...]} for chunked PDFs."""
+    if "chunks" not in raw:
+        return extract_blocks(raw, file_id, file_name)
+    blocks: list[dict[str, Any]] = []
+    pages = 0
+    for chunk in raw["chunks"]:
+        chunk_blocks, chunk_pages = extract_blocks(chunk, file_id, file_name, breadcrumbs=False)
+        blocks += chunk_blocks
+        pages = max(pages, chunk_pages)
+    add_breadcrumbs(blocks)
+    return blocks, pages
+
+
+def extract_blocks(
+    raw: dict[str, Any], file_id: str, file_name: str, breadcrumbs: bool = True
+) -> tuple[list[dict[str, Any]], int]:
     """Blocks {id, file_id, file_name, page, locator, text, bbox?} and the page count."""
     content = raw.get("content") or {}
     markdown = content.get("content") or ""
@@ -284,11 +366,12 @@ def extract_blocks(raw: dict[str, Any], file_id: str, file_name: str) -> tuple[l
             }
             if (page, m) in bboxes:
                 block["bbox"] = bboxes[(page, m)]
-            table = _table_rows(chunk)
+            table = _table_rows(chunk) or _html_table_rows(chunk)
             if table:
                 block["table"] = table
             blocks.append(block)
-    add_breadcrumbs(blocks)
+    if breadcrumbs:
+        add_breadcrumbs(blocks)
     return blocks, pages
 
 
@@ -317,47 +400,134 @@ def text_file_blocks(path: str, file_id: str, file_name: str) -> tuple[list[dict
     return blocks, 1
 
 
+def _human(e: Exception) -> str:
+    """A short message for the file row."""
+    if isinstance(e, ParseError):
+        text = str(e)
+        if "timed out" in text:
+            return "Reading this file took too long. Try again, or split it into smaller files."
+        return text if len(text) <= 160 else text[:157] + "…"
+    return f"Couldn't read this file ({type(e).__name__})."
+
+
+def _progress(ws: str, file_id: str, **changes: Any) -> None:
+    storage.update_file(ws, file_id, progress_at=time.time(), **changes)
+
+
+def _parse_chunked(
+    ws: str, file_id: str, name: str, path: str, tier: str, page_count: int
+) -> tuple[list[dict[str, Any]], int, str, list[str]]:
+    """Parse a long PDF 20 pages at a time; each chunk is searchable as soon as it lands.
+    A failing chunk is retried once (on the default tier if the fast one failed), then skipped."""
+    chunks: list[dict[str, Any]] = []
+    blocks: list[dict[str, Any]] = []
+    skipped: list[str] = []
+    for start in range(1, page_count + 1, CHUNK_PAGES):
+        end = min(start + CHUNK_PAGES - 1, page_count)
+        _progress(ws, file_id, progress_label=f"Reading pages {start}–{end} of {page_count}")
+        raw = None
+        for attempt_tier in (tier, MINERU_TIER):  # one retry; the default tier if the fast one failed
+            try:
+                raw = parse_file(path, attempt_tier, pages=f"{start}-{end}")
+                break
+            except ParseError as e:
+                log.warning("%s pages %d-%d failed on %s: %s", name, start, end, attempt_tier, e)
+        if raw is None:
+            skipped.append(f"{start}–{end}")
+            continue
+        chunks.append(raw)
+        chunk_blocks, _ = extract_blocks(raw, file_id, name, breadcrumbs=False)
+        blocks += chunk_blocks
+        add_breadcrumbs(blocks)
+        storage.replace_file_blocks(ws, file_id, blocks)  # searchable while the rest parses
+        search.rebuild(ws)
+    (storage.parsed_dir(ws) / f"{file_id}.json").write_text(json.dumps({"chunks": chunks}, ensure_ascii=False), encoding="utf-8")
+    return blocks, page_count, tier, skipped
+
+
 def _parse_job(ws: str, file_id: str) -> None:
+    global _active
     record = next((r for r in storage.list_file_records(ws) if r["id"] == file_id), None)
-    if record is None:
+    if record is None or record["status"] == "ready":
         return
+    _active = (ws, file_id)
     started = time.monotonic()
-    storage.update_file(ws, file_id, status="parsing", progress_label="Reading pages…", error=None)
+    _progress(ws, file_id, status="parsing", progress_label="Reading pages…", error=None)
     try:
+        skipped: list[str] = []
         if record["name"].rsplit(".", 1)[-1].lower() in TEXT_EXTENSIONS:
             tier = "text"
             blocks, pages = text_file_blocks(record["path"], file_id, record["name"])
         else:
-            tier, page_count = choose_tier(record["path"])
-            # MinerU's CLI doesn't report per-page progress, so show the page count from pypdf.
+            path = prepare_pdf(ws, file_id, record["path"])
+            tier, page_count = choose_tier(path)
             label = f"Reading {page_count} pages…" if page_count > 1 else "Reading pages…"
-            storage.update_file(ws, file_id, tier=tier, progress_label=label)
+            _progress(ws, file_id, tier=tier, progress_label=label)
             log.info("parsing %s (%s) on MinerU tier %s, %d pages", record["name"], file_id, tier, page_count)
-            try:
-                raw = parse_file(record["path"], tier)
-            except ParseError:
-                if tier == MINERU_TIER:
-                    raise
-                # Fast path failed: fall back to the old behavior (the default tier).
-                log.warning("tier %s failed for %s; retrying on %s", tier, record["name"], MINERU_TIER)
-                tier = MINERU_TIER
-                storage.update_file(ws, file_id, tier=tier)
-                raw = parse_file(record["path"], tier)
-            (storage.parsed_dir(ws) / f"{file_id}.json").write_text(json.dumps(raw, ensure_ascii=False), encoding="utf-8")
-            blocks, pages = extract_blocks(raw, file_id, record["name"])
+            if path.lower().endswith(".pdf") and page_count > CHUNK_THRESHOLD:
+                blocks, pages, tier, skipped = _parse_chunked(ws, file_id, record["name"], path, tier, page_count)
+            else:
+                try:
+                    raw = parse_file(path, tier)
+                except ParseError:
+                    if tier == MINERU_TIER:
+                        raise
+                    # Fast path failed: fall back to the old behavior (the default tier).
+                    log.warning("tier %s failed for %s; retrying on %s", tier, record["name"], MINERU_TIER)
+                    tier = MINERU_TIER
+                    _progress(ws, file_id, tier=tier)
+                    raw = parse_file(path, tier)
+                (storage.parsed_dir(ws) / f"{file_id}.json").write_text(json.dumps(raw, ensure_ascii=False), encoding="utf-8")
+                blocks, pages = extract_blocks(raw, file_id, record["name"])
         if not blocks:
             raise ParseError("No readable text found. Try a clearer copy.")
         storage.replace_file_blocks(ws, file_id, blocks)
         search.rebuild(ws)
         seconds = round(time.monotonic() - started, 1)
-        storage.update_file(ws, file_id, status="ready", pages=pages, progress_label=None, tier=tier, parse_seconds=seconds)
-        log.info("ready: %s on tier %s, %d pages, %d blocks, %.1fs", record["name"], tier, pages, len(blocks), seconds)
+        note = f"Pages {', '.join(skipped)} couldn't be read." if skipped else None
+        storage.update_file(
+            ws, file_id, status="ready", pages=pages, progress_label=None, tier=tier, parse_seconds=seconds, error=note
+        )
+        log.info("ready: %s on tier %s, %d pages, %d blocks, %.1fs%s", record["name"], tier, pages, len(blocks), seconds, f" ({note})" if note else "")
         # Vectors for hybrid search, off the parse thread; on failure asks/startup retry.
         _embed_executor.submit(search.index_vectors, ws)
     except Exception as e:  # noqa: BLE001 - any failure marks the file failed, never crashes the worker
-        message = str(e) if isinstance(e, ParseError) else f"Couldn't read this file ({type(e).__name__})."
-        storage.update_file(ws, file_id, status="failed", progress_label=None, error=message)
+        log.warning("failed: %s: %s", record["name"], e)
+        storage.update_file(ws, file_id, status="failed", progress_label=None, error=_human(e))
+    finally:
+        _active = None
     storage.touch_workspace(ws)
+
+
+_active: tuple[str, str] | None = None
+
+
+def _watchdog() -> None:
+    """Every minute: a file left "parsing" with no progress for 10 minutes and not being
+    worked on is requeued once, then marked failed with a message."""
+    while True:
+        time.sleep(60)
+        try:
+            for ws in storage.workspace_ids():
+                for record in storage.list_file_records(ws):
+                    if record["status"] != "parsing" or _active == (ws, record["id"]):
+                        continue
+                    if time.time() - record.get("progress_at", 0) < STALL_SECONDS:
+                        continue
+                    if record.get("stall_retries", 0) < 1:
+                        storage.update_file(ws, record["id"], status="queued", progress_label=None, stall_retries=1)
+                        enqueue(ws, record["id"])
+                    else:
+                        storage.update_file(
+                            ws, record["id"], status="failed", progress_label=None,
+                            error="Parsing stopped responding. Try uploading the file again.",
+                        )
+        except Exception as e:  # noqa: BLE001 - the watchdog must never die
+            log.warning("watchdog: %s", e)
+
+
+def start_watchdog() -> None:
+    threading.Thread(target=_watchdog, name="parse-watchdog", daemon=True).start()
 
 
 def enqueue(ws: str, file_id: str) -> None:

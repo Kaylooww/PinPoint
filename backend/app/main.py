@@ -29,6 +29,7 @@ async def lifespan(_: FastAPI) -> AsyncIterator[None]:
         search.rebuild(ws)
         parsing.resume_interrupted(ws)
         folders.resume(ws)
+    parsing.start_watchdog()
     # Fill in any missing vectors without delaying startup.
     threading.Thread(target=lambda: [search.index_vectors(ws) for ws in storage.workspace_ids()], daemon=True).start()
     yield

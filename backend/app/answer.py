@@ -61,6 +61,32 @@ def _ready_file_ids(ws: str) -> tuple[str, ...]:
     return tuple(sorted(r["id"] for r in storage.list_file_records(ws) if r["status"] == "ready"))
 
 
+def _focused(text: str, question: str, limit: int) -> str:
+    """A long block cut for the LLM: the first line (its header) plus the lines that best
+    match the question, in document order, up to `limit` characters. A balance sheet's
+    "TOTAL ASSETS" row near the end stays in view instead of being cut off."""
+    if len(text) <= limit:
+        return text
+    lines = [ln for ln in text.splitlines() if ln.strip()]
+    if len(lines) < 3:
+        return _snippet(text, limit)
+    terms = set(search.tokenize(question))
+    ranked = sorted(range(1, len(lines)), key=lambda i: -len(terms & set(search.tokenize(lines[i]))))
+    keep, used = {0}, len(lines[0])
+    for i in ranked:
+        if used + len(lines[i]) + 1 > limit:
+            continue
+        keep.add(i)
+        used += len(lines[i]) + 1
+    out, last = [], -1
+    for i in sorted(keep):
+        if i != last + 1:
+            out.append("…")
+        out.append(lines[i])
+        last = i
+    return "\n".join(out)
+
+
 def _snippet(text: str, limit: int) -> str:
     text = " ".join(text.split())
     return text if len(text) <= limit else text[: limit - 1].rsplit(" ", 1)[0] + "…"
@@ -377,7 +403,7 @@ def _generate(
     context = extra + context
     by_id = {f"b{i}": block for i, block in enumerate(context, start=1)}
     passages = "\n\n".join(
-        f"[{bid}] ({_source_label(block)}) {' > '.join(block.get('path') or [])}{':' if block.get('path') else ''}\n{_snippet(block['text'], MAX_BLOCK_CHARS)}"
+        f"[{bid}] ({_source_label(block)}) {' > '.join(block.get('path') or [])}{':' if block.get('path') else ''}\n{_focused(block['text'], question, MAX_BLOCK_CHARS)}"
         for bid, block in by_id.items()
     )
     try:

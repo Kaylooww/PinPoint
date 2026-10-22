@@ -6,4 +6,4 @@ rank_bm25
 Pillow
 python-dotenv
 anthropic
-pypdf
+pypdf[crypto]
