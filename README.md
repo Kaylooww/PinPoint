@@ -90,3 +90,6 @@ A 14-day free trial lets firms try it on their own files before paying.
 
 ## Demo video
 https://www.youtube.com/watch?v=1GbLXRP_tac
+
+##Slides
+https://www.canva.com/design/DAHYtrBfgA0/lPM_WvFC0Cx35VP6MiyrZg/edit
