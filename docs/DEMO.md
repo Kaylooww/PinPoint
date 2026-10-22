@@ -119,16 +119,26 @@ The questions below are verified against the current sample files. Swap in the f
 **Reyes & Partners** (scanned contract + phone photo of a receipt):
 - How much is the penalty if the rented car is taken outside Cebu? → two clauses, PHP 10,000 and at least PHP 5,000, with crops
 - Follow-up: Who is the renter? → Dr. Crarina Caldenm (scan text); needs embeddings ok, else ask "Who is the renter named in that agreement?"
-- What is the invoice number on the receipt? → 00544947, from the photo
+- What is the invoice number on the McDonald's receipt? → 00544947, from the photo (name the receipt: "the receipt" alone is too vague now that Rules of Court and the Constitution are in this workspace)
 - When is the filing deadline for the Santos case? → **Not found**
 
-**Villanueva Accounting** (all fictional):
+**Villanueva Accounting** (5 fictional documents plus 3 real, public BIR issuances):
+
+Real documents in `backend/demo_files/villanueva-accounting/` (Philippine government works; not subject to copyright under IP Code Sec. 176), downloaded from the BIR's own file server:
+- `BIR_RMC_30-2026_ITR_Deadline_Extension.pdf`: RMC No. 30-2026, https://bir-cdn.bir.gov.ph/BIR/pdf/RMC%20No.%2030-2026.pdf
+- `BIR_RMC_77-2024_Invoicing_Questions_and_Answers.pdf`: RMC No. 77-2024 (scanned, 12 pages), https://bir-cdn.bir.gov.ph/BIR/pdf/RMC%20No.%2077-2024.pdf
+- `BIR_RR_11-2024_Invoicing_Amendments.pdf`: RR No. 11-2024 (scanned, 5 pages), https://bir-cdn.bir.gov.ph/BIR/pdf/RR%20No.%2011-2024.pdf
+
+Fictional documents:
 - How much is the monthly retainer for Bayview Bakery? → PHP 18,500 (engagement letter PDF, crop)
 - How much VAT is on invoice VA-2026-0187, and when is it due? → PHP 2,640.00, due May 15, 2026 (invoice PDF, crops)
 - What was the total on the Northwind Stationers receipt? → PHP 1,236.50 (receipt photo, crop)
 - How much did we spend on travel in February 2026? → PHP 6,450.00, Panay Air (spreadsheet, text card)
 - When must the 2026 books be closed? → January 15, 2027 (memo, text card)
-- When was this letter sent? → March 2, 2026, citing the letter's date line
+- When was the engagement letter to Bayview Bakery sent? → March 2, 2026, citing the letter's date line ("this letter" alone now picks the memo)
+- Until when was the deadline for filing 2025 annual income tax returns extended? → May 15, 2026 (BIR RMC 30-2026, crop)
+- Do VAT-registered sellers have to issue an invoice for every sale, regardless of amount? → yes, each sale regardless of amount (BIR RMC 77-2024, scanned, crops)
+- Can service businesses still use their remaining official receipts after the invoicing changes? → yes, two options as bullets (RMC 77-2024)
 - What is Bayview Bakery's bank account number? → **Not found**
 
 ## 4. Fallback plan

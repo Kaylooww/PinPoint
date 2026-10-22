@@ -56,6 +56,8 @@ def ensure(ws: str, blocks: list[dict[str, Any]], max_new: int | None = None) ->
     """
     with _lock(ws):
         cached = load(ws)
+        # Vectors embed the passage text alone (the heading path goes to BM25), so existing
+        # vectors stay valid when breadcrumbs change and nothing needs a mass re-embed.
         wanted = {text_hash(b["text"]): b["text"] for b in blocks if b.get("text", "").strip()}
         missing = [(h, t) for h, t in wanted.items() if h not in cached]
         if max_new is not None:

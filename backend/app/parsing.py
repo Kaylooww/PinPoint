@@ -180,6 +180,80 @@ def _mineru_bboxes(sha256: str, tier: str) -> dict[tuple[int, int], list[float]]
         return {}
 
 
+# Heading breadcrumbs. Levels: a heading at one level clears everything below it.
+HEADING_LEVELS = {
+    "book": 0, "part": 1, "schedule": 1, "annex": 1, "title": 2, "article": 3,
+    "chapter": 4, "rule": 5, "section": 6, "sec.": 6, "§": 6, "clause": 7,
+}
+HEADING_RE = re.compile(
+    r"^(book|part|title|article|chapter|rule|section|sec\.|§|clause|schedule|annex)\s*"
+    r"([0-9]+(?:\.[0-9]+)*[a-z]?|[ivxlcdm]+)\b[.:]?\s*(.*)$",
+    re.IGNORECASE | re.DOTALL,
+)
+# "1. Scope" or "2.3 Fees": a dot is required, so OCR lines like "6000 L AND W" don't count.
+NUMBERED_RE = re.compile(r"^(\d{1,2}\.|\d{1,2}(?:\.\d{1,2}){1,3})\s+([A-Za-z].*)$")
+MAX_HEADING_LINE = 100
+
+
+def _titled(text: str) -> str:
+    return text.title() if text.isupper() else text
+
+
+def heading_of(block: dict[str, Any], next_block: dict[str, Any] | None) -> tuple[int, str] | None:
+    """(level, label) if the block starts a heading; Sections also carry their own text."""
+    text = block["text"].strip()
+    first_line = text.split("\n", 1)[0]
+    match = HEADING_RE.match(first_line)
+    if match:
+        word, number, rest = match.group(1).lower(), match.group(2), match.group(3).strip()
+        level = HEADING_LEVELS[word]
+        name = {"sec.": "Section", "§": "Section"}.get(word, word.capitalize())
+        number = number.upper() if re.fullmatch(r"[ivxlcdm]+", number, re.IGNORECASE) else number
+        if level == HEADING_LEVELS["section"] or level == HEADING_LEVELS["clause"]:
+            return level, f"{name} {number}"  # "Section 21. The Senate ..." is a section that starts here
+        if "\n" in text or len(text) > MAX_HEADING_LINE or re.search(r"\s\d+\s*$", rest):
+            return None  # a table of contents ("RULE 63 Declaratory Relief ... 45") or prose that mentions a rule
+        title = rest.rstrip(" .0123456789").strip()
+        if not title and next_block is not None:
+            nxt = next_block["text"].strip()
+            if nxt.isupper() and len(nxt) <= 80 and not HEADING_RE.match(nxt) and not any(ch.isdigit() for ch in nxt):
+                title = nxt
+        return level, f"{name} {number}" + (f" — {_titled(title)}" if title else "")
+    numbered = NUMBERED_RE.match(first_line)
+    if numbered and "\n" not in text and len(text) <= 60 and not text.endswith("."):
+        number = numbered.group(1).rstrip(".")
+        return 8 + number.count("."), f"{number} {numbered.group(2)}"
+    return None
+
+
+def add_breadcrumbs(blocks: list[dict[str, Any]]) -> None:
+    """Give each block "path" (heading labels above it, outermost first) and "heading_ids"
+    (the block ids of those headings), walking the file in reading order."""
+    # Table-of-contents pages are mostly bare "RULE 20 …" / "PART V …" lines; their headings
+    # must not open a Part or Rule over the real body that follows.
+    per_page: dict[int, list[bool]] = {}
+    for block in blocks:
+        first = block["text"].strip().split("\n", 1)[0]
+        bare = bool(HEADING_RE.match(first)) and not re.match(r"^(section|sec\.|§)", first, re.IGNORECASE)
+        per_page.setdefault(block["page"], []).append(bare)
+    toc_pages = {
+        page for page, marks in per_page.items()
+        if (sum(marks) >= 4 and sum(marks) >= 0.4 * len(marks)) or (sum(marks) >= 6 and sum(marks) >= 0.2 * len(marks))
+    }
+
+    open_headings: dict[int, tuple[str, str]] = {}
+    for i, block in enumerate(blocks):
+        found = None if block["page"] in toc_pages else heading_of(block, blocks[i + 1] if i + 1 < len(blocks) else None)
+        if found:
+            level, label = found
+            for deeper in [lv for lv in open_headings if lv >= level]:
+                del open_headings[deeper]
+            open_headings[level] = (label, block["id"])
+        levels = sorted(open_headings)
+        block["path"] = [open_headings[lv][0] for lv in levels]
+        block["heading_ids"] = [open_headings[lv][1] for lv in levels]
+
+
 def extract_blocks(raw: dict[str, Any], file_id: str, file_name: str) -> tuple[list[dict[str, Any]], int]:
     """Blocks {id, file_id, file_name, page, locator, text, bbox?} and the page count."""
     content = raw.get("content") or {}
@@ -214,6 +288,7 @@ def extract_blocks(raw: dict[str, Any], file_id: str, file_name: str) -> tuple[l
             if table:
                 block["table"] = table
             blocks.append(block)
+    add_breadcrumbs(blocks)
     return blocks, pages
 
 
@@ -238,6 +313,7 @@ def text_file_blocks(path: str, file_id: str, file_name: str) -> tuple[list[dict
                     "text": cleaned,
                 }
             )
+    add_breadcrumbs(blocks)
     return blocks, 1
 
 

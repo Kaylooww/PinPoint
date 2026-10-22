@@ -52,3 +52,8 @@ const TYPE_BY_EXTENSION: Record<string, FileType> = {
 export function fileTypeFromName(name: string): FileType {
   return TYPE_BY_EXTENSION[name.split('.').pop()?.toLowerCase() ?? ''] ?? 'other'
 }
+
+/** "Article VI · Section 21" from a citation path: the part before " — " of each heading. */
+export function breadcrumb(path?: string[]): string {
+  return (path ?? []).map((p) => p.split(' — ')[0]).join(' · ')
+}

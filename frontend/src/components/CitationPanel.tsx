@@ -1,6 +1,7 @@
 import { BookOpen, Check, ChevronDown, Copy, FileText, X, StickyNote } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import type { Citation } from '../lib/types'
+import { breadcrumb } from '../lib/format'
 import { BlockText } from './BlockText'
 import { Button } from './Button'
 import { CropImage } from './CropImage'
@@ -75,6 +76,12 @@ export function CitationPanel({ citation, total, onClose, onOpenDocument }: Cita
           {citation.kind === 'note' ? 'Note saved in Memory' : `${citation.file_name} · Page ${citation.page}`}
         </span>
       </div>
+
+      {citation.path?.length ? (
+        <p className="-mt-2 truncate text-small text-muted" title={citation.path.join(' > ')}>
+          {breadcrumb(citation.path)}
+        </p>
+      ) : null}
 
       <div className="overflow-hidden rounded-card">
         <CropImage citation={citation} size="panel" />
