@@ -1,6 +1,6 @@
 # PinPoint — Handoff
 
-Last updated: Thursday 15:47, structured answers + demo account. Branch: structured-answers (stacked on full-crops / PR #10).
+Last updated: Thursday 15:52, new logo. Branch: new-logo (stacked on structured-answers / PR #11).
 
 ## Done (and tested)
 - Phase A 1–6: backend core on MinerU **basic** tier; both samples parse to ready; crops; API end-to-end.
@@ -13,6 +13,7 @@ Last updated: Thursday 15:47, structured answers + demo account. Branch: structu
 - Phase D 17: knowledge stats strip at the top of the Files tab (GET /knowledge), refreshed when files change. Browser-checked against the API.
 
 ## In progress
+- New logo DONE: frontend/public/pinpoint-logo.png (from the image shared in chat; it wasn't in the repo yet). Logo component = full-color mark (28px sidebar, size prop, 24px for small uses) + "PinPoint" wordmark; LogoMark export for 64–96px hero/empty-state use. favicon-32/16, apple-touch-icon (180, on white), icon-512 generated with Pillow; index.html links them; Vite favicon.svg removed. Landing and Sign in are still placeholders without the Logo component (the patch hasn't landed), so they show no logo yet: the patch should use <Logo /> or <LogoMark size={80} />.
 - Structured answers DONE: answer items have kind paragraph | bullet | numbered | heading (missing → paragraph, so old history renders); per-item citation rule unchanged, headings uncited labels that never count as the answer, stray markdown stripped; AnswerCard renders <ul>/<ol>/H3 labels with markers per item; Copy answer keeps bullets and numbers; answer max_tokens 2000 (structured lists were cut off at 1200). Tests: tests/test_structured.py; live: House bills → intro + 6 cited bullets, Villanueva deadlines → 4 numbered, receipt → one paragraph, Santos → not found; Save, crops, history reopen OK; light + dark.
 - Demo account is now Luther Dira · luther@reyeslaw.ph (sidebar, initials LD).
 - ATTENTION: someone uploaded Rules of Court.pdf (196 pages) into Villanueva Accounting. Its ~6,000 passages crowd out the small documents there: "travel in February 2026" now returns not_found and "When was this letter sent?" misses March 2, 2026. Not deleted (no-delete rule). Fix: remove it from Villanueva (it belongs to Reyes & Partners, which already has it), or diversify retrieval per file.
