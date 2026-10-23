@@ -2,11 +2,12 @@ import { Clock, Plus } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { Button } from '../components/Button'
+import { DeleteWorkspaceDialog } from '../components/DeleteWorkspaceDialog'
 import { NewWorkspaceDialog } from '../components/NewWorkspaceDialog'
 import { WorkspaceCard } from '../components/WorkspaceCard'
 import { api } from '../lib/api'
 import { timeAgo } from '../lib/format'
-import type { CreateWorkspaceRequest, HistoryItem } from '../lib/types'
+import type { CreateWorkspaceRequest, HistoryItem, Workspace } from '../lib/types'
 import { useWorkspaces } from '../lib/workspaces'
 
 type RecentRow = HistoryItem & { workspaceId: string; workspaceName: string }
@@ -16,6 +17,7 @@ export function WorkspacesPage() {
   const navigate = useNavigate()
   const { workspaces, loading, error, refresh } = useWorkspaces()
   const [creating, setCreating] = useState(false)
+  const [deleting, setDeleting] = useState<Workspace | null>(null)
   const [recent, setRecent] = useState<RecentRow[] | null>(null)
   const totalFiles = workspaces.reduce((n, w) => n + w.file_count, 0)
 
@@ -52,6 +54,12 @@ export function WorkspacesPage() {
     navigate(`/w/${ws.id}/files`)
   }
 
+  const remove = async (ws: Workspace) => {
+    await api.deleteWorkspace(ws.id)
+    await refresh()
+    setDeleting(null)
+  }
+
   return (
     <div className="flex flex-col gap-7 pt-1">
       <header className="flex items-center justify-between">
@@ -76,7 +84,7 @@ export function WorkspacesPage() {
         <div className="grid grid-cols-[repeat(auto-fill,minmax(300px,1fr))] gap-5">
           {loading && !workspaces.length
             ? [0, 1, 2].map((i) => <div key={i} className="h-[178px] animate-pulse rounded-card border border-border bg-surface" />)
-            : workspaces.map((w) => <WorkspaceCard key={w.id} workspace={w} />)}
+            : workspaces.map((w) => <WorkspaceCard key={w.id} workspace={w} onDelete={setDeleting} />)}
           <button
             type="button"
             onClick={() => setCreating(true)}
@@ -116,6 +124,7 @@ export function WorkspacesPage() {
       </section>
 
       {creating && <NewWorkspaceDialog onCreate={create} onClose={() => setCreating(false)} />}
+      {deleting && <DeleteWorkspaceDialog workspace={deleting} onDelete={remove} onClose={() => setDeleting(null)} />}
     </div>
   )
 }

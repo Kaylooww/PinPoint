@@ -47,6 +47,13 @@ _cache: dict[tuple[str, str, tuple[str, ...]], dict[str, Any]] = {}
 _cache_guard = threading.Lock()
 
 
+def forget(ws: str) -> None:
+    """Drop a deleted workspace's cached answers (a new workspace may reuse its id)."""
+    with _cache_guard:
+        for key in [k for k in _cache if k[0] == ws]:
+            del _cache[key]
+
+
 def _source_label(block: dict[str, Any]) -> str:
     if block.get("kind") == "note":
         return "Note saved by the user about this client"
@@ -59,6 +66,32 @@ def _normalize(question: str) -> str:
 
 def _ready_file_ids(ws: str) -> tuple[str, ...]:
     return tuple(sorted(r["id"] for r in storage.list_file_records(ws) if r["status"] == "ready"))
+
+
+def _focused(text: str, question: str, limit: int) -> str:
+    """A long block cut for the LLM: the first line (its header) plus the lines that best
+    match the question, in document order, up to `limit` characters. A balance sheet's
+    "TOTAL ASSETS" row near the end stays in view instead of being cut off."""
+    if len(text) <= limit:
+        return text
+    lines = [ln for ln in text.splitlines() if ln.strip()]
+    if len(lines) < 3:
+        return _snippet(text, limit)
+    terms = set(search.tokenize(question))
+    ranked = sorted(range(1, len(lines)), key=lambda i: -len(terms & set(search.tokenize(lines[i]))))
+    keep, used = {0}, len(lines[0])
+    for i in ranked:
+        if used + len(lines[i]) + 1 > limit:
+            continue
+        keep.add(i)
+        used += len(lines[i]) + 1
+    out, last = [], -1
+    for i in sorted(keep):
+        if i != last + 1:
+            out.append("…")
+        out.append(lines[i])
+        last = i
+    return "\n".join(out)
 
 
 def _snippet(text: str, limit: int) -> str:
@@ -363,21 +396,34 @@ def _generate(
         return _not_found("No passages in these files match the question.", searched_files, started)
 
     pool = [b for b in search.get_index(ws).blocks if file_ids is None or b["file_id"] in file_ids]
-    context = expand_context(pool, [block for block, _ in hits])
+    # A local model gets 8 blocks in all (6 retrieved + 2 headings or neighbours) so it stays fast.
+    limit = llm.max_context_blocks()
+    max_headings = min(MAX_HEADING_BLOCKS, limit - TOP_K)
+    context = expand_context(pool, [block for block, _ in hits], cap=limit)
     # The headings above the retrieved passages (e.g. the "Article VI" block), so a claim
-    # about the location can cite the heading itself: at most 4 extra blocks.
+    # about the location can cite the heading itself: at most 4 extra blocks (2 when local).
     by_block_id = {b["id"]: b for b in pool}
     in_context = {b["id"] for b in context}
     extra = []
     for block, _ in hits:
         for hid in block.get("heading_ids") or []:
-            if hid not in in_context and hid in by_block_id and len(extra) < MAX_HEADING_BLOCKS:
+            if hid not in in_context and hid in by_block_id and len(extra) < max_headings:
                 extra.append(by_block_id[hid])
                 in_context.add(hid)
+    if limit < MAX_CONTEXT_BLOCKS and extra:
+        # Make room for the headings, never dropping a retrieved block.
+        retrieved = {block["id"] for block, _ in hits}
+        drop = len(context) + len(extra) - limit
+        for block in reversed(list(context)):
+            if drop <= 0:
+                break
+            if block["id"] not in retrieved:
+                context.remove(block)
+                drop -= 1
     context = extra + context
     by_id = {f"b{i}": block for i, block in enumerate(context, start=1)}
     passages = "\n\n".join(
-        f"[{bid}] ({_source_label(block)}) {' > '.join(block.get('path') or [])}{':' if block.get('path') else ''}\n{_snippet(block['text'], MAX_BLOCK_CHARS)}"
+        f"[{bid}] ({_source_label(block)}) {' > '.join(block.get('path') or [])}{':' if block.get('path') else ''}\n{_focused(block['text'], question, MAX_BLOCK_CHARS)}"
         for bid, block in by_id.items()
     )
     try:

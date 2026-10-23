@@ -80,6 +80,11 @@ export const api = {
   createWorkspace: (body: CreateWorkspaceRequest): Promise<Workspace> =>
     USE_MOCKS ? mock.createWorkspace(body) : request('/api/workspaces', json('POST', body)),
 
+  deleteWorkspace: async (ws: string): Promise<void> => {
+    if (USE_MOCKS) return mock.deleteWorkspace(ws)
+    await request(`/api/workspaces/${encodeURIComponent(ws)}`, { method: 'DELETE' })
+  },
+
   listFiles: (ws: string): Promise<FileItem[]> =>
     USE_MOCKS ? mock.listFiles(ws) : request(`/api/workspaces/${encodeURIComponent(ws)}/files`),
 
@@ -97,6 +102,11 @@ export const api = {
           `/api/workspaces/${encodeURIComponent(ws)}/ask`,
           json('POST', { question, ...(threadId ? { thread_id: threadId } : {}), ...(fileIds ? { file_ids: fileIds } : {}) }),
         ),
+
+  deleteFile: async (ws: string, fileId: string): Promise<void> => {
+    if (USE_MOCKS) return mock.deleteFile(ws, fileId)
+    await request(`/api/workspaces/${encodeURIComponent(ws)}/files/${encodeURIComponent(fileId)}`, { method: 'DELETE' })
+  },
 
   listNotes: (ws: string): Promise<Note[]> =>
     USE_MOCKS ? mock.listNotes(ws) : request(`/api/workspaces/${encodeURIComponent(ws)}/notes`),

@@ -9,6 +9,7 @@ from __future__ import annotations
 import json
 import os
 import re
+import shutil
 import tempfile
 import threading
 import uuid
@@ -32,6 +33,9 @@ EXTENSION_TYPES = {
 
 _locks: dict[str, threading.RLock] = {}
 _locks_guard = threading.Lock()
+# Workspaces deleted while a background job (parse, folder scan, embedding) may still write
+# to them: those writes are dropped so the folder doesn't come back.
+_deleted: set[str] = set()
 
 
 class NotFound(Exception):
@@ -54,7 +58,14 @@ def _read_json(path: Path, default: Any) -> Any:
         return default
 
 
+def is_deleted(ws: str) -> bool:
+    return ws in _deleted
+
+
 def _write_json(path: Path, value: Any) -> None:
+    resolved = path.resolve()
+    if resolved.is_relative_to(DATA_DIR.resolve()) and resolved.relative_to(DATA_DIR.resolve()).parts[0] in _deleted:
+        return
     path.parent.mkdir(parents=True, exist_ok=True)
     fd, tmp = tempfile.mkstemp(dir=path.parent, prefix=f".{path.name}.", suffix=".tmp")
     with os.fdopen(fd, "w", encoding="utf-8") as f:
@@ -124,6 +135,7 @@ def _slugify(name: str) -> str:
 
 def create_workspace(name: str, industry: str, ws_id: str | None = None) -> dict[str, Any]:
     ws = ws_id or _slugify(name)
+    _deleted.discard(ws)
     with lock(ws):
         stamp = now_iso()
         _write_json(
@@ -142,8 +154,20 @@ def touch_workspace(ws: str) -> None:
         _write_json(ws_dir(ws) / "workspace.json", record)
 
 
+def delete_workspace(ws: str) -> None:
+    """Delete a workspace and everything PinPoint stored for it in backend/data/{ws}: uploads,
+    parses, blocks, vectors, crops, notes, history. Connected folders' originals are never touched."""
+    with lock(ws):
+        _workspace_record(ws)  # NotFound if it doesn't exist
+        _deleted.add(ws)
+        path = ws_dir(ws)
+        if path.resolve().parent == DATA_DIR.resolve():  # never anything outside backend/data
+            shutil.rmtree(path, ignore_errors=True)
+
+
 def seed_demo_workspace() -> None:
-    if not (DATA_DIR / DEMO_WORKSPACE["id"] / "workspace.json").exists():
+    """A fresh install starts with the demo workspace; once deleted, it stays deleted."""
+    if not workspace_ids():
         create_workspace(DEMO_WORKSPACE["name"], DEMO_WORKSPACE["industry"], DEMO_WORKSPACE["id"])
 
 
@@ -301,6 +325,36 @@ def remove_file(ws: str, file_id: str) -> None:
     with lock(ws):
         save_file_records(ws, [r for r in list_file_records(ws) if r["id"] != file_id])
         replace_file_blocks(ws, file_id, [])
+
+
+class CannotDelete(Exception):
+    pass
+
+
+def delete_file(ws: str, file_id: str) -> None:
+    """Delete a file the user uploaded: its record, blocks, and our copies inside backend/data
+    (upload, saved parse, decrypted copy, crops). A file still queued or being read is
+    cancelled first by the caller (parsing.cancel). Folder files are refused: their original
+    belongs to the user, and a rescan would bring them back."""
+    with lock(ws):
+        record = next((r for r in list_file_records(ws) if r["id"] == file_id), None)
+        if record is None:
+            raise NotFound(file_id)
+        if record.get("source") == "folder":
+            raise CannotDelete("This file is in a connected folder. Remove it from the folder and rescan, or disconnect the folder.")
+        blocks = load_blocks(ws)
+        gone = [b for b in blocks if b["file_id"] == file_id]
+        remove_file(ws, file_id)
+        files = [uploads_dir(ws) / Path(record["path"]).name, *parsed_dir(ws).glob(f"{file_id}.*")]
+        files += [crops_dir(ws) / f"{b['id']}.png" for b in gone]
+        # Rendered pages are shared by every upload of the same document; keep them while one remains.
+        docs = {b["locator"].split("/", 1)[0] for b in gone if b["locator"].startswith("doc:")}
+        docs -= {b["locator"].split("/", 1)[0] for b in blocks if b["file_id"] != file_id}
+        for doc in docs:
+            files += (crops_dir(ws) / "pages").glob(re.sub(r"[^a-z0-9]+", "-", doc.lower()) + "-*.png")
+        for path in files:
+            if path.resolve().is_relative_to(ws_dir(ws).resolve()):  # never outside backend/data/{ws}
+                path.unlink(missing_ok=True)
 
 
 def add_folder_file(ws: str, folder_id: str, source_path: str, size: int, mtime: float) -> dict[str, Any]:

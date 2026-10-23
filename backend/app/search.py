@@ -83,6 +83,12 @@ def rebuild(ws: str) -> Index:
     return index
 
 
+def forget(ws: str) -> None:
+    """Drop a deleted workspace's index."""
+    with _guard:
+        _indexes.pop(ws, None)
+
+
 def get_index(ws: str) -> Index:
     with _guard:
         index = _indexes.get(ws)
@@ -136,16 +142,18 @@ def expand_query(question: str, context: list[tuple[str, str]] | None = None) ->
 
 RRF_K = 60
 CANDIDATES = 30
-# Qwen3-Embedding is trained with an instruction on queries (never on documents).
-QUERY_INSTRUCTION = "Instruct: Given a question about a client's documents, retrieve passages that answer it\nQuery: "
 
 
 def index_vectors(ws: str) -> None:
     """Embed any blocks and notes without a cached vector. Never raises."""
     from . import embeddings
 
-    if llm.embeddings_enabled():
+    if not llm.embeddings_enabled():
+        return
+    if embeddings.ready(ws):
         embeddings.ensure(ws, get_index(ws).blocks)
+    else:  # a whole-workspace re-embed: never inside a request (create_note calls this)
+        embeddings.reembed_in_background(ws, get_index(ws).blocks)
 
 
 def hybrid(
@@ -161,8 +169,12 @@ def hybrid(
     if not llm.embeddings_enabled():
         return lexical[:k]
     index = get_index(ws)
+    if not embeddings.ready(ws):
+        # Vectors from another embedding model (or a re-embed still running): BM25 alone meanwhile.
+        embeddings.reembed_in_background(ws, index.blocks)
+        return lexical[:k]
     try:
-        query = embeddings.normalize(llm.embed([QUERY_INSTRUCTION + question])[0])
+        query = embeddings.normalize(llm.embed([embeddings.query_text(question)])[0])
     except llm.LLMError:
         return lexical[:k]
     vectors = embeddings.ensure(ws, index.blocks, max_new=32)  # retry a few missing ones per ask

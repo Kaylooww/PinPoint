@@ -103,6 +103,28 @@ export function FilesPage() {
     }
   }
 
+  const deleteFile = async (file: FileItem) => {
+    try {
+      await api.deleteFile(id, file.id)
+      setUploadError(null)
+      setUploadMessage(`Deleted ${file.name}.`)
+      await load()
+    } catch (e) {
+      setUploadError(e instanceof Error ? e.message : 'Delete failed.')
+    }
+  }
+
+  const cancelUpload = async (file: FileItem) => {
+    try {
+      await api.deleteFile(id, file.id)
+      setUploadError(null)
+      setUploadMessage(`Cancelled ${file.name}.`)
+      await load()
+    } catch (e) {
+      setUploadError(e instanceof Error ? e.message : 'Could not cancel the upload.')
+    }
+  }
+
   const upload = useCallback(
     async (picked: File[]) => {
       const supported = picked.filter((f) => isSupported(f.name))
@@ -250,7 +272,13 @@ export function FilesPage() {
           ) : (
             <div className="flex flex-col gap-1.5">
               {files.map((file) => (
-                <FileRow key={file.id} file={file} onOpen={(f) => setViewing({ id: f.id, name: f.name, type: f.type })} />
+                <FileRow
+                  key={file.id}
+                  file={file}
+                  onOpen={(f) => setViewing({ id: f.id, name: f.name, type: f.type })}
+                  onDelete={deleteFile}
+                  onCancel={cancelUpload}
+                />
               ))}
             </div>
           )}
