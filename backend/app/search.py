@@ -83,6 +83,12 @@ def rebuild(ws: str) -> Index:
     return index
 
 
+def forget(ws: str) -> None:
+    """Drop a deleted workspace's index."""
+    with _guard:
+        _indexes.pop(ws, None)
+
+
 def get_index(ws: str) -> Index:
     with _guard:
         index = _indexes.get(ws)

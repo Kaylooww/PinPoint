@@ -110,6 +110,22 @@ def create_workspace(body: CreateWorkspace) -> dict[str, Any]:
     return storage.create_workspace(body.name.strip(), body.industry.strip())
 
 
+@app.delete("/api/workspaces/{ws}")
+def delete_workspace(ws: str) -> dict[str, bool]:
+    """Delete a workspace and all of its data in backend/data. Parsing is cancelled first."""
+    _require_workspace(ws)
+    for record in storage.list_file_records(ws):
+        if record["status"] in ("queued", "parsing"):
+            parsing.cancel(ws, record["id"])
+    try:
+        storage.delete_workspace(ws)
+    except storage.NotFound:
+        raise HTTPException(status_code=404, detail="Workspace not found") from None
+    search.forget(ws)
+    answer.forget(ws)
+    return {"ok": True}
+
+
 @app.get("/api/workspaces/{ws}/files")
 def list_files(ws: str) -> list[dict[str, Any]]:
     _require_workspace(ws)
@@ -128,6 +144,24 @@ async def upload_files(ws: str, files: list[UploadFile] = File(...)) -> list[dic
         parsing.enqueue(ws, record["id"])
         added.append(storage.file_view(record))
     return added
+
+
+@app.delete("/api/workspaces/{ws}/files/{file_id}")
+def delete_file(ws: str, file_id: str) -> dict[str, bool]:
+    """Delete an uploaded file; one that is queued or being read is cancelled first."""
+    _require_workspace(ws)
+    record = next((r for r in storage.list_file_records(ws) if r["id"] == file_id), None)
+    if record and record.get("source") != "folder" and record["status"] in ("queued", "parsing"):
+        parsing.cancel(ws, file_id)
+    try:
+        storage.delete_file(ws, file_id)
+    except storage.NotFound:
+        raise HTTPException(status_code=404, detail="File not found") from None
+    except storage.CannotDelete as e:
+        raise HTTPException(status_code=409, detail=str(e)) from None
+    search.rebuild(ws)
+    storage.touch_workspace(ws)
+    return {"ok": True}
 
 
 @app.get("/api/workspaces/{ws}/files/{file_id}/raw")

@@ -67,6 +67,12 @@ export async function createWorkspace(body: CreateWorkspaceRequest): Promise<Wor
   return structuredClone(ws)
 }
 
+export async function deleteWorkspace(id: string): Promise<void> {
+  await delay(300)
+  state.workspaces = state.workspaces.filter((w) => w.id !== id)
+  for (const table of [state.files, state.notes, state.folders, state.history]) delete table[id]
+}
+
 /** Each poll moves queued files to parsing and parsing files to ready (Board_Resolution fails over to ready too). */
 function advance(file: FileItem): void {
   if (file.status !== 'queued' && file.status !== 'parsing') return
@@ -174,6 +180,11 @@ export async function addNote(ws: string, text: string): Promise<Note> {
   const note: Note = { id: crypto.randomUUID().slice(0, 12), text: text.trim(), created_at: new Date().toISOString() }
   ;(state.notes[ws] ??= []).unshift(note)
   return structuredClone(note)
+}
+
+export async function deleteFile(ws: string, fileId: string): Promise<void> {
+  await delay(200)
+  state.files[ws] = filesOf(ws).filter((f) => f.id !== fileId)
 }
 
 export async function deleteNote(ws: string, noteId: string): Promise<void> {

@@ -47,6 +47,13 @@ _cache: dict[tuple[str, str, tuple[str, ...]], dict[str, Any]] = {}
 _cache_guard = threading.Lock()
 
 
+def forget(ws: str) -> None:
+    """Drop a deleted workspace's cached answers (a new workspace may reuse its id)."""
+    with _cache_guard:
+        for key in [k for k in _cache if k[0] == ws]:
+            del _cache[key]
+
+
 def _source_label(block: dict[str, Any]) -> str:
     if block.get("kind") == "note":
         return "Note saved by the user about this client"

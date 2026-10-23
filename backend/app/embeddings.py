@@ -78,6 +78,8 @@ def _current(data: dict[str, Any]) -> bool:
 
 
 def _write(ws: str, vectors: dict[str, list[float]], complete: bool) -> None:
+    if storage.is_deleted(ws):
+        return  # deleted while this pass ran: don't bring its folder back
     cfg = llm.embed_config()
     storage.ws_dir(ws).mkdir(parents=True, exist_ok=True)
     tmp = _path(ws).with_suffix(".tmp")

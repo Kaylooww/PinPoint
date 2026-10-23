@@ -46,14 +46,25 @@ def mineru_bin() -> str | None:
     return str(fallback) if fallback.exists() else None
 
 
-def run_mineru(args: list[str], timeout: float) -> subprocess.CompletedProcess[str]:
+def run_mineru(args: list[str], timeout: float, track: bool = False) -> subprocess.CompletedProcess[str]:
+    """Run the mineru CLI. `track` (the parse worker only) lets cancel() kill it mid-parse."""
+    global _proc
     binary = mineru_bin()
     if not binary:
         raise ParseError("mineru is not installed or not on PATH")
-    try:
-        return subprocess.run([binary, *args], capture_output=True, text=True, timeout=timeout)
-    except subprocess.TimeoutExpired as e:
-        raise ParseError(f"mineru {args[0]} timed out after {timeout:.0f}s") from e
+    with subprocess.Popen([binary, *args], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True) as proc:
+        if track:
+            _proc = proc
+        try:
+            stdout, stderr = proc.communicate(timeout=timeout)
+        except subprocess.TimeoutExpired as e:
+            proc.kill()
+            proc.communicate()
+            raise ParseError(f"mineru {args[0]} timed out after {timeout:.0f}s") from e
+        finally:
+            if track:
+                _proc = None
+    return subprocess.CompletedProcess(proc.args, proc.returncode, stdout, stderr)
 
 
 def _last_line(proc: subprocess.CompletedProcess[str]) -> str:
@@ -148,7 +159,7 @@ def parse_file(path: str, tier: str = MINERU_TIER, pages: str = "all") -> dict[s
     args = ["parse", path, "--tier", tier, "--json", "--wait", str(wait), "--limit", "50000000"]
     if path.lower().endswith(".pdf"):
         args += ["--pages", pages]  # MinerU rejects --pages for non-PDF files
-    proc = run_mineru(args, timeout=wait + 60)
+    proc = run_mineru(args, timeout=wait + 60, track=True)
     try:
         raw = json.loads(proc.stdout)
     except json.JSONDecodeError as e:
@@ -423,6 +434,7 @@ def _parse_chunked(
     blocks: list[dict[str, Any]] = []
     skipped: list[str] = []
     for start in range(1, page_count + 1, CHUNK_PAGES):
+        _check_cancelled(ws, file_id)
         end = min(start + CHUNK_PAGES - 1, page_count)
         _progress(ws, file_id, progress_label=f"Reading pages {start}–{end} of {page_count}")
         raw = None
@@ -439,14 +451,51 @@ def _parse_chunked(
         chunk_blocks, _ = extract_blocks(raw, file_id, name, breadcrumbs=False)
         blocks += chunk_blocks
         add_breadcrumbs(blocks)
+        _check_cancelled(ws, file_id)
         storage.replace_file_blocks(ws, file_id, blocks)  # searchable while the rest parses
         search.rebuild(ws)
     (storage.parsed_dir(ws) / f"{file_id}.json").write_text(json.dumps({"chunks": chunks}, ensure_ascii=False), encoding="utf-8")
     return blocks, page_count, tier, skipped
 
 
+class Cancelled(Exception):
+    pass
+
+
+# Files the user cancelled (or deleted with their workspace) while queued or being read.
+_cancelled: set[tuple[str, str]] = set()
+_proc: subprocess.Popen[str] | None = None  # the parse worker's running mineru call
+
+
+def cancel(ws: str, file_id: str) -> None:
+    """Stop parsing a queued or in-progress file. A queued job skips it; a running one has its
+    mineru call killed and discards its output. The caller deletes the file's record."""
+    _cancelled.add((ws, file_id))
+    proc = _proc
+    if _active == (ws, file_id) and proc is not None:
+        proc.kill()
+
+
+def _check_cancelled(ws: str, file_id: str) -> None:
+    if (ws, file_id) in _cancelled:
+        raise Cancelled()
+
+
+def _discard(ws: str, file_id: str) -> None:
+    """Undo whatever a cancelled job wrote after its file was deleted."""
+    if storage.is_deleted(ws) or not (storage.ws_dir(ws) / "workspace.json").exists():
+        return
+    storage.replace_file_blocks(ws, file_id, [])
+    for path in storage.parsed_dir(ws).glob(f"{file_id}.*"):
+        path.unlink(missing_ok=True)
+    search.rebuild(ws)
+
+
 def _parse_job(ws: str, file_id: str) -> None:
     global _active
+    if (ws, file_id) in _cancelled:
+        _cancelled.discard((ws, file_id))
+        return
     record = next((r for r in storage.list_file_records(ws) if r["id"] == file_id), None)
     if record is None or record["status"] == "ready":
         return
@@ -481,6 +530,7 @@ def _parse_job(ws: str, file_id: str) -> None:
                 blocks, pages = extract_blocks(raw, file_id, record["name"])
         if not blocks:
             raise ParseError("No readable text found. Try a clearer copy.")
+        _check_cancelled(ws, file_id)
         storage.replace_file_blocks(ws, file_id, blocks)
         search.rebuild(ws)
         seconds = round(time.monotonic() - started, 1)
@@ -492,10 +542,15 @@ def _parse_job(ws: str, file_id: str) -> None:
         # Vectors for hybrid search, off the parse thread; on failure asks/startup retry.
         _embed_executor.submit(search.index_vectors, ws)
     except Exception as e:  # noqa: BLE001 - any failure marks the file failed, never crashes the worker
+        if (ws, file_id) in _cancelled:
+            log.info("cancelled: %s", record["name"])
+            _discard(ws, file_id)
+            return
         log.warning("failed: %s: %s", record["name"], e)
         storage.update_file(ws, file_id, status="failed", progress_label=None, error=_human(e))
     finally:
         _active = None
+        _cancelled.discard((ws, file_id))
     storage.touch_workspace(ws)
 
 
